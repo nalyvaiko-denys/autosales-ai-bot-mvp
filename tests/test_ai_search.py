@@ -1,0 +1,110 @@
+from decimal import Decimal
+
+from autosales.ai.provider import RuleBasedProvider
+from autosales.ai.search import HybridSearchService, ambiguous_numeric_tokens, hard_filters
+from autosales.enums import FuelType
+from autosales.schemas import NaturalLanguageCriteria
+
+
+async def test_rule_parser_extracts_ukrainian_constraints() -> None:
+    criteria = await RuleBasedProvider().extract_criteria(
+        "Шукаю сімейний кросовер до $20,000, автомат, бензин або гібрид, не старше 2019 року"
+    )
+    assert criteria.budget_max == Decimal("20000")
+    assert criteria.body_types == ["crossover"]
+    assert criteria.transmission == "automatic"
+    assert set(criteria.fuel_types) == {"petrol", "hybrid"}
+    assert criteria.year_from == 2019
+    assert criteria.use_case == "family"
+
+
+async def test_ai_search_never_breaks_budget_or_availability(session, inventory) -> None:
+    result = await HybridSearchService(session, RuleBasedProvider()).search(
+        "Сімейний кросовер автомат до $20,000 бензин або гібрид", limit=5
+    )
+    assert result.recommendations
+    assert all(item.car.price <= Decimal("20000") for item in result.recommendations)
+    assert all(item.car.status.value == "available" for item in result.recommendations)
+    assert {item.car.brand for item in result.recommendations} == {"Toyota"}
+    assert "ціна" in result.recommendations[0].explanation.lower()
+
+
+def test_hard_filters_preserve_numeric_limits() -> None:
+    filters = hard_filters(
+        NaturalLanguageCriteria(budget_max=Decimal("15000"), year_from=2020, mileage_max=60000)
+    )
+    assert filters.price_to == Decimal("15000")
+    assert filters.year_from == 2020
+    assert filters.mileage_to == 60000
+
+
+async def test_rule_parser_accepts_free_word_order_when_numbers_are_labeled() -> None:
+    query = "mazda ціна 2010 євро рік від 1990 пробіг до 150000 км"
+    assert ambiguous_numeric_tokens(query) == []
+
+    criteria = await RuleBasedProvider().extract_criteria(query)
+
+    assert criteria.budget_max == Decimal("2010")
+    assert criteria.year_from == 1990
+    assert criteria.mileage_max == 150000
+    assert criteria.preferred_brands == ["mazda"]
+
+
+async def test_ai_search_requests_clarification_for_unlabeled_numbers(session, inventory) -> None:
+    result = await HybridSearchService(session, RuleBasedProvider()).search("mazda 2010 >1990")
+
+    assert result.requires_clarification is True
+    assert result.recommendations == []
+    assert "ціна, рік чи пробіг" in result.clarification
+
+
+async def test_color_words_are_not_used_as_search_filters() -> None:
+    criteria = await RuleBasedProvider().extract_criteria("чорна mazda")
+
+    assert criteria.preferred_brands == ["mazda"]
+    assert "color" not in type(criteria).model_fields
+
+
+async def test_free_text_listing_is_structured_without_extra_questions() -> None:
+    query = "Мазда 3, пробіг 10000, ціна 9890$, 1.4 бензин, автомат, 2011 рік"
+    provider = RuleBasedProvider()
+
+    draft = await provider.extract_car_draft(query)
+
+    assert draft.brand == "mazda"
+    assert draft.model == "3"
+    assert draft.mileage == 10000
+    assert draft.price == Decimal("9890")
+    assert draft.currency == "USD"
+    assert draft.engine_volume == Decimal("1.4")
+    assert draft.fuel_type == "petrol"
+    assert draft.transmission == "automatic"
+    assert draft.year == 2011
+    assert ambiguous_numeric_tokens(query) == []
+
+
+async def test_copying_existing_car_description_finds_that_car(session, inventory) -> None:
+    result = await HybridSearchService(session, RuleBasedProvider()).search(
+        "Toyota RAV4, пробіг 70000 км, ціна 19500$, 2.5 гібрид, автомат, 2020 рік"
+    )
+
+    assert result.requires_clarification is False
+    assert result.criteria.engine_volume == Decimal("2.5")
+    assert [item.car.model for item in result.recommendations] == ["RAV4"]
+    assert result.recommendations[0].car.engine_volume == Decimal("2.5")
+    assert result.recommendations[0].car.description == "Надійний сімейний автомобіль"
+    assert result.clarification is None
+
+
+def test_currency_suffix_is_unambiguously_a_price() -> None:
+    assert ambiguous_numeric_tokens("авто за 19800$") == []
+
+
+async def test_gas_is_a_valid_fuel_for_draft_and_search() -> None:
+    provider = RuleBasedProvider()
+
+    draft = await provider.extract_car_draft("Мазда 3, 2021 рік, 1.4 газ, автомат, ціна 9000$")
+    criteria = await provider.extract_criteria("авто на газу")
+
+    assert draft.fuel_type == FuelType.GAS
+    assert criteria.fuel_types == [FuelType.GAS]
