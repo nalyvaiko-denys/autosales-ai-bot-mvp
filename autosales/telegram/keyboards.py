@@ -101,15 +101,21 @@ def admin_car_actions(
             )
         ],
     ]
+    management_row = []
     if not archived:
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=button("admin.car.archive", language),
-                    callback_data=f"admcar:archive:{car_id}",
-                )
-            ]
+        management_row.append(
+            InlineKeyboardButton(
+                text=button("admin.car.archive", language),
+                callback_data=f"admcar:archive:{car_id}",
+            )
         )
+    management_row.append(
+        InlineKeyboardButton(
+            text=button("admin.car.delete", language),
+            callback_data=f"admcar:delete:{car_id}",
+        )
+    )
+    rows.append(management_row)
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -136,11 +142,8 @@ def admin_car_edit_fields(car_id: int, language: str = "uk") -> InlineKeyboardMa
 
 def admin_car_statuses(car_id: int, *, action: str, language: str = "uk") -> InlineKeyboardMarkup:
     statuses = [
-        (car_status_label("draft", language), "draft"),
         (car_status_label("available", language), "available"),
-        (car_status_label("service", language), "service"),
         (car_status_label("reserved", language), "reserved"),
-        (car_status_label("test_drive", language), "test_drive"),
         (car_status_label("sold", language), "sold"),
         (car_status_label("archived", language), "archived"),
     ]
@@ -165,6 +168,24 @@ def admin_locations(locations: list[tuple[int, str]], *, action: str) -> InlineK
             for location_id, name in locations
         ]
     )
+
+
+def admin_inventory_locations(
+    locations: list[tuple[int, str]], language: str = "uk"
+) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=button("admin.inventory.all_locations", language),
+                callback_data="admcar:listloc:all",
+            )
+        ]
+    ]
+    rows.extend(
+        [InlineKeyboardButton(text=name, callback_data=f"admcar:listloc:{location_id}")]
+        for location_id, name in locations
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def admin_photo_actions(
@@ -207,6 +228,23 @@ def archive_confirmation(car_id: int, language: str = "uk") -> InlineKeyboardMar
                 InlineKeyboardButton(
                     text=button("admin.cancel", language),
                     callback_data=f"admcar:archno:{car_id}",
+                ),
+            ]
+        ]
+    )
+
+
+def car_delete_confirmation(car_id: int, language: str = "uk") -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=button("admin.confirm.delete", language),
+                    callback_data=f"admcar:delok:{car_id}",
+                ),
+                InlineKeyboardButton(
+                    text=button("admin.cancel", language),
+                    callback_data=f"admcar:delno:{car_id}",
                 ),
             ]
         ]

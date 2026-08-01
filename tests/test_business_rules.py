@@ -7,8 +7,8 @@ from autosales.ai.content import ContentService, set_content_status
 from autosales.ai.provider import RuleBasedProvider
 from autosales.config import get_settings
 from autosales.enums import AppointmentStatus, CarStatus, ContentStatus, FuelType, LeadStatus
-from autosales.errors import ConflictError, UnavailableCarError
-from autosales.models import AuditLog
+from autosales.errors import ConflictError, NotFoundError, UnavailableCarError
+from autosales.models import AuditLog, Location
 from autosales.schemas import (
     AppointmentCreate,
     CarCreate,
@@ -23,6 +23,7 @@ from autosales.services.inventory import (
     add_telegram_photos,
     archive_car,
     create_car,
+    delete_car,
     set_main_photo,
     update_car,
 )
@@ -32,7 +33,7 @@ from autosales.worker import due_appointment_reminders
 
 def test_vin_is_masked(inventory) -> None:
     car = inventory["cars"][0]
-    assert car.masked_vin == "JTM**********3456"
+    assert car.masked_vin == "WAU**********4567"
     assert car.vin not in car.masked_vin
 
 
@@ -134,6 +135,31 @@ async def test_favorite_is_idempotent(session, inventory) -> None:
     assert await service.favorites(customer.id) == []
 
 
+async def test_archived_car_is_hidden_from_every_public_catalog_path(session, inventory) -> None:
+    customer = inventory["customer"]
+    car = inventory["cars"][0]
+    service = CatalogService(session)
+    await service.add_favorite(customer.id, car.id)
+
+    await archive_car(session, car.id, "telegram-admin:42")
+
+    with pytest.raises(NotFoundError):
+        await service.get(car.id)
+    assert await service.favorites(customer.id) == []
+    result = await service.search(CarSearchFilters(statuses=[CarStatus.AVAILABLE]))
+    assert car.id not in {item.id for item in result.items}
+
+
+async def test_car_can_be_permanently_deleted(session, inventory) -> None:
+    car = inventory["cars"][1]
+
+    await delete_car(session, car.id, "telegram-admin:42")
+
+    assert await session.get(type(car), car.id) is None
+    actions = list((await session.scalars(select(AuditLog.action))).all())
+    assert "car.delete" in actions
+
+
 async def test_ukrainian_admin_values_are_canonicalized_before_catalog(session, inventory) -> None:
     car = inventory["cars"][1]
     car.fuel_type = "газ"
@@ -151,6 +177,45 @@ async def test_ukrainian_admin_values_are_canonicalized_before_catalog(session, 
     assert car.drive_type == "fwd"
     assert car.body_type == "coupe"
     assert result.items[0].fuel_type == FuelType.GAS
+
+
+async def test_changing_address_moves_car_between_location_inventories(session, inventory) -> None:
+    original_location = inventory["location"]
+    car = inventory["cars"][0]
+    second_location = Location(
+        name="Майданчик 2",
+        address="вул. Механізаторів, 1А",
+        city="Полтава",
+        is_active=True,
+    )
+    session.add(second_location)
+    await session.commit()
+
+    moved = await update_car(
+        session,
+        car.id,
+        CarUpdate(location_id=second_location.id),
+        "telegram-admin:42",
+    )
+    old_inventory = await CatalogService(session).search(
+        CarSearchFilters(
+            location_id=original_location.id,
+            statuses=[CarStatus.AVAILABLE],
+            page_size=50,
+        )
+    )
+    new_inventory = await CatalogService(session).search(
+        CarSearchFilters(
+            location_id=second_location.id,
+            statuses=[CarStatus.AVAILABLE],
+            page_size=50,
+        )
+    )
+
+    assert moved.location_id == second_location.id
+    assert moved.location.address == "вул. Механізаторів, 1А"
+    assert car.id not in {item.id for item in old_inventory.items}
+    assert car.id in {item.id for item in new_inventory.items}
 
 
 async def test_generated_content_always_starts_as_draft(session, inventory) -> None:
@@ -220,7 +285,7 @@ async def test_manager_inventory_lifecycle_and_photo_cover(session, inventory) -
             transmission="automatic",
             drive_type="fwd",
             description="Заплановано до продажу",
-            status=CarStatus.DRAFT,
+            status=CarStatus.ARCHIVED,
             location_id=location.id,
         ),
         "telegram-admin:42",

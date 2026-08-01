@@ -13,11 +13,9 @@ from autosales.schemas import (
 )
 from autosales.services.catalog import CatalogService
 from autosales.services.inventory import (
-    archive_car as archive_inventory_car,
-)
-from autosales.services.inventory import (
     create_car as create_inventory_car,
 )
+from autosales.services.inventory import delete_car as delete_inventory_car
 from autosales.services.inventory import (
     update_car as update_inventory_car,
 )
@@ -49,5 +47,5 @@ async def update_car(car_id: int, data: CarUpdate, session: SessionDep, actor: S
 
 
 @router.delete("/{car_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def archive_car(car_id: int, session: SessionDep, actor: StaffDep) -> None:
-    await archive_inventory_car(session, car_id, actor)
+async def delete_car(car_id: int, session: SessionDep, actor: StaffDep) -> None:
+    await delete_inventory_car(session, car_id, actor)

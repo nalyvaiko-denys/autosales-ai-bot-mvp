@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from autosales.enums import CarStatus, MediaType
 from autosales.errors import ConflictError, NotFoundError
-from autosales.models import Car, CarMedia, Location
+from autosales.models import Appointment, Car, CarMedia, Favorite, GeneratedContent, Lead, Location
 from autosales.schemas import CarCreate, CarUpdate
 from autosales.services.audit import record_audit
 from autosales.services.catalog import CatalogService
@@ -26,7 +26,6 @@ EMBEDDING_FIELDS = {
     "description",
     "equipment",
     "condition",
-    "use_cases",
 }
 MAX_CAR_PHOTOS = 10
 STANDARD_FINANCE_TEXT = "Можливий продаж в кредит або лізинг"
@@ -105,6 +104,33 @@ async def archive_car(session: AsyncSession, car_id: int, actor: str) -> Car:
     )
     await session.commit()
     return await service.get(car.id, public=False)
+
+
+async def delete_car(session: AsyncSession, car_id: int, actor: str) -> None:
+    """Permanently delete a listing and its listing-specific dependent records."""
+    car = await CatalogService(session).get(car_id, public=False)
+    await record_audit(
+        session,
+        user_id=actor,
+        action="car.delete",
+        entity_type="car",
+        entity_id=car.id,
+        old_value={
+            "brand": car.brand,
+            "model": car.model,
+            "year": car.year,
+            "status": car.status.value,
+            "location_id": car.location_id,
+        },
+    )
+    # Leads remain useful CRM history, but no longer link to a deleted listing.
+    await session.execute(update(Lead).where(Lead.car_id == car_id).values(car_id=None))
+    # These rows describe the listing itself and must disappear together with it.
+    await session.execute(delete(Appointment).where(Appointment.car_id == car_id))
+    await session.execute(delete(GeneratedContent).where(GeneratedContent.car_id == car_id))
+    await session.execute(delete(Favorite).where(Favorite.car_id == car_id))
+    await session.delete(car)
+    await session.commit()
 
 
 async def add_telegram_photos(

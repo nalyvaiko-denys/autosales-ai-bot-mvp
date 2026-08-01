@@ -8,24 +8,23 @@ from autosales.schemas import NaturalLanguageCriteria
 
 async def test_rule_parser_extracts_ukrainian_constraints() -> None:
     criteria = await RuleBasedProvider().extract_criteria(
-        "Шукаю сімейний кросовер до $20,000, автомат, бензин або гібрид, не старше 2019 року"
+        "Шукаю кросовер до $20,000, автомат, бензин або гібрид, не старше 2019 року"
     )
     assert criteria.budget_max == Decimal("20000")
     assert criteria.body_types == ["crossover"]
     assert criteria.transmission == "automatic"
     assert set(criteria.fuel_types) == {"petrol", "hybrid"}
     assert criteria.year_from == 2019
-    assert criteria.use_case == "family"
 
 
 async def test_ai_search_never_breaks_budget_or_availability(session, inventory) -> None:
     result = await HybridSearchService(session, RuleBasedProvider()).search(
-        "Сімейний кросовер автомат до $20,000 бензин або гібрид", limit=5
+        "Кросовер автомат до $20,000 бензин або гібрид", limit=5
     )
     assert result.recommendations
     assert all(item.car.price <= Decimal("20000") for item in result.recommendations)
     assert all(item.car.status.value == "available" for item in result.recommendations)
-    assert {item.car.brand for item in result.recommendations} == {"Toyota"}
+    assert {item.car.brand for item in result.recommendations} == {"Audi"}
     assert "ціна" in result.recommendations[0].explanation.lower()
 
 
@@ -65,6 +64,18 @@ async def test_color_words_are_not_used_as_search_filters() -> None:
     assert "color" not in type(criteria).model_fields
 
 
+async def test_subjective_labels_are_not_search_criteria(session, inventory) -> None:
+    result = await HybridSearchService(session, RuleBasedProvider()).search(
+        "Надійна економна машина як перша"
+    )
+
+    assert "use_case" not in type(result.criteria).model_fields
+    assert "priorities" not in type(result.criteria).model_fields
+    assert result.recommendations == []
+    assert result.requires_clarification is True
+    assert "об’єктивний критерій" in (result.clarification or "")
+
+
 async def test_free_text_listing_is_structured_without_extra_questions() -> None:
     query = "Мазда 3, пробіг 10000, ціна 9890$, 1.4 бензин, автомат, 2011 рік"
     provider = RuleBasedProvider()
@@ -85,14 +96,14 @@ async def test_free_text_listing_is_structured_without_extra_questions() -> None
 
 async def test_copying_existing_car_description_finds_that_car(session, inventory) -> None:
     result = await HybridSearchService(session, RuleBasedProvider()).search(
-        "Toyota RAV4, пробіг 70000 км, ціна 19500$, 2.5 гібрид, автомат, 2020 рік"
+        "Audi Q5, пробіг 70000 км, ціна 19500$, 2.5 гібрид, автомат, 2020 рік"
     )
 
     assert result.requires_clarification is False
     assert result.criteria.engine_volume == Decimal("2.5")
-    assert [item.car.model for item in result.recommendations] == ["RAV4"]
+    assert [item.car.model for item in result.recommendations] == ["Q5"]
     assert result.recommendations[0].car.engine_volume == Decimal("2.5")
-    assert result.recommendations[0].car.description == "Надійний сімейний автомобіль"
+    assert result.recommendations[0].car.description == "Автомобіль пройшов технічну перевірку"
     assert result.clarification is None
 
 
@@ -108,3 +119,30 @@ async def test_gas_is_a_valid_fuel_for_draft_and_search() -> None:
 
     assert draft.fuel_type == FuelType.GAS
     assert criteria.fuel_types == [FuelType.GAS]
+
+
+async def test_listing_parser_does_not_merge_price_with_engine_volume() -> None:
+    draft = await RuleBasedProvider().extract_car_draft(
+        "AUDI A3, пробіг 224000, ціна 7500, 1.6 бензин, автомат, 2005 рік, Київське шосе"
+    )
+
+    assert draft.brand == "audi"
+    assert draft.model == "a3"
+    assert draft.price == Decimal("7500")
+    assert draft.mileage == 224000
+    assert draft.engine_volume == Decimal("1.6")
+    assert draft.year == 2005
+
+
+async def test_listing_parser_repairs_malformed_thousands_and_uses_position() -> None:
+    draft = await RuleBasedProvider().extract_car_draft(
+        "renault kangoo, 187000, 7,,200$, 1.6 газ, механіка, 2008, Київське шосе"
+    )
+
+    assert draft.brand == "renault"
+    assert draft.model == "kangoo"
+    assert draft.price == Decimal("7200")
+    assert draft.currency == "USD"
+    assert draft.mileage == 187000
+    assert draft.year == 2008
+    assert draft.fuel_type == FuelType.GAS

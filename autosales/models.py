@@ -96,9 +96,8 @@ class Car(TimestampMixin, Base):
     description: Mapped[str | None] = mapped_column(Text)
     equipment: Mapped[str | None] = mapped_column(Text)
     condition: Mapped[str | None] = mapped_column(Text)
-    use_cases: Mapped[str | None] = mapped_column(Text)
     status: Mapped[CarStatus] = mapped_column(
-        Enum(CarStatus, native_enum=False), default=CarStatus.DRAFT, index=True
+        Enum(CarStatus, native_enum=False), default=CarStatus.AVAILABLE, index=True
     )
     popularity: Mapped[int] = mapped_column(Integer, default=0)
     location_id: Mapped[int] = mapped_column(ForeignKey("locations.id"), index=True)
@@ -156,7 +155,6 @@ class Car(TimestampMixin, Base):
             self.description or "",
             self.equipment or "",
             self.condition or "",
-            self.use_cases or "",
         ]
         return "\n".join(value.strip() for value in values if value.strip())
 

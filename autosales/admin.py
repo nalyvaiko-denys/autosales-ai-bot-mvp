@@ -24,6 +24,7 @@ from autosales.models import (
     Location,
     Manager,
 )
+from autosales.services.inventory import delete_car
 
 
 class AuditedModelView:
@@ -106,7 +107,15 @@ class CarAdmin(AuditedModelView, ModelView, model=Car):
     column_filters = [Car.status, Car.location_id, Car.brand, Car.year]
     column_default_sort = [(Car.updated_at, True)]
     column_formatters = {Car.status: lambda model, attribute: car_status_label(model.status)}
-    can_delete = False
+    can_delete = True
+
+    async def delete_model(self, request: Request, pk: Any) -> None:
+        async with self.session_maker(expire_on_commit=False) as session:
+            await delete_car(
+                session,
+                int(pk),
+                actor=f"admin:{request.session.get('staff', 'unknown')}",
+            )
 
 
 class CustomerAdmin(AuditedModelView, ModelView, model=Customer):

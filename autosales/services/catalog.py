@@ -79,7 +79,6 @@ class CatalogService:
                     func.lower(Car.model).like(query),
                     func.lower(Car.description).like(query),
                     func.lower(Car.equipment).like(query),
-                    func.lower(Car.use_cases).like(query),
                 )
             )
         return statement
@@ -120,9 +119,7 @@ class CatalogService:
             .execution_options(populate_existing=True)
         )
         if public:
-            statement = statement.where(
-                Car.status.in_([CarStatus.AVAILABLE, CarStatus.RESERVED, CarStatus.TEST_DRIVE])
-            )
+            statement = statement.where(Car.status == CarStatus.AVAILABLE)
         car = await self.session.scalar(statement)
         if car is None:
             raise NotFoundError("Автомобіль не знайдено")
@@ -132,6 +129,7 @@ class CatalogService:
         return car
 
     async def add_favorite(self, customer_id: int, car_id: int) -> Favorite:
+        await self.get(car_id)
         existing = await self.session.scalar(
             select(Favorite).where(Favorite.customer_id == customer_id, Favorite.car_id == car_id)
         )
@@ -158,7 +156,7 @@ class CatalogService:
             .options(selectinload(Car.media), selectinload(Car.location))
             .where(
                 Favorite.customer_id == customer_id,
-                Car.status.in_([CarStatus.AVAILABLE, CarStatus.RESERVED, CarStatus.TEST_DRIVE]),
+                Car.status == CarStatus.AVAILABLE,
             )
             .order_by(Favorite.created_at.desc())
         )

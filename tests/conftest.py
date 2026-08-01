@@ -45,8 +45,8 @@ async def inventory(session: AsyncSession) -> dict[str, object]:
     )
     cars = [
         Car(
-            brand="Toyota",
-            model="RAV4",
+            brand="Audi",
+            model="Q5",
             year=2020,
             price=Decimal("19500"),
             mileage=70000,
@@ -55,9 +55,8 @@ async def inventory(session: AsyncSession) -> dict[str, object]:
             transmission="automatic",
             drive_type="awd",
             engine_volume=Decimal("2.5"),
-            vin="JTMBRREV0LD123456",
-            description="Надійний сімейний автомобіль",
-            use_cases="family reliability economy",
+            vin="WAUZZZFY0L1234567",
+            description="Автомобіль пройшов технічну перевірку",
             status=CarStatus.AVAILABLE,
             location_id=location.id,
             created_at=datetime.now().astimezone(),
@@ -74,7 +73,6 @@ async def inventory(session: AsyncSession) -> dict[str, object]:
             transmission="automatic",
             drive_type="awd",
             description="Premium SUV",
-            use_cases="family comfort",
             status=CarStatus.AVAILABLE,
             location_id=location.id,
             created_at=datetime.now().astimezone(),
@@ -91,7 +89,6 @@ async def inventory(session: AsyncSession) -> dict[str, object]:
             transmission="automatic",
             drive_type="awd",
             description="Reserved car",
-            use_cases="family",
             status=CarStatus.RESERVED,
             location_id=location.id,
             created_at=datetime.now().astimezone(),

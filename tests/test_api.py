@@ -28,8 +28,8 @@ async def test_api_catalog_ai_and_auth() -> None:
         api_session.add(customer)
         api_session.add(
             Car(
-                brand="Toyota",
-                model="RAV4",
+                brand="Audi",
+                model="Q5",
                 year=2020,
                 price=19000,
                 mileage=70000,
@@ -39,7 +39,6 @@ async def test_api_catalog_ai_and_auth() -> None:
                 drive_type="awd",
                 status=CarStatus.AVAILABLE,
                 location_id=location.id,
-                use_cases="family reliability",
             )
         )
         await api_session.commit()
@@ -68,11 +67,11 @@ async def test_api_catalog_ai_and_auth() -> None:
         )
         assert catalog.status_code == 200
         assert catalog.json()["total"] == 1
-        assert catalog.json()["items"][0]["brand"] == "Toyota"
+        assert catalog.json()["items"][0]["brand"] == "Audi"
 
         search = await client.post(
             "/api/v1/ai/search",
-            json={"query": "Сімейний кросовер автомат до $20,000 гібрид"},
+            json={"query": "Кросовер автомат до $20,000 гібрид"},
         )
         assert search.status_code == 200
         assert search.json()["recommendations"][0]["car"]["price"] == "19000.00"
@@ -83,7 +82,7 @@ async def test_api_catalog_ai_and_auth() -> None:
         )
         assert assistant.status_code == 200
         assert assistant.json()["intent"] == "search"
-        assert assistant.json()["search"]["recommendations"][0]["car"]["brand"] == "Toyota"
+        assert assistant.json()["search"]["recommendations"][0]["car"]["brand"] == "Audi"
 
         unauthorized = await client.get("/api/v1/analytics")
         assert unauthorized.status_code == 401

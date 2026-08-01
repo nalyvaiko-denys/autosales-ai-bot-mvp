@@ -16,7 +16,7 @@ from aiogram.types import (
     Message,
     ReplyKeyboardRemove,
 )
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from autosales.ai.assistant import SalesAssistantGraph
@@ -168,12 +168,32 @@ async def _manager_recipient_ids(session: AsyncSession, settings: Settings) -> s
             )
         )
     )
+    configured_usernames = set(settings.manager_chat_username_list)
+    username_ids: set[int] = set()
+    if configured_usernames:
+        username_rows = (
+            await session.execute(
+                select(Customer.username, Customer.telegram_id).where(
+                    Customer.username.is_not(None),
+                    func.lower(Customer.username).in_(configured_usernames),
+                )
+            )
+        ).all()
+        username_ids = {telegram_id for _, telegram_id in username_rows}
+        resolved_usernames = {username.lower() for username, _ in username_rows if username}
+        unresolved_usernames = configured_usernames - resolved_usernames
+        if unresolved_usernames:
+            logger.warning(
+                "telegram_manager_username_not_registered",
+                usernames=sorted(unresolved_usernames),
+            )
     return {
         int(chat_id)
         for chat_id in (
             *settings.manager_chat_id_list,
             *settings.telegram_admin_id_list,
             *database_ids,
+            *username_ids,
         )
         if chat_id is not None
     }
@@ -720,26 +740,54 @@ async def car_lead(
     session_factory: async_sessionmaker[AsyncSession],
     settings: Settings,
 ) -> None:
-    car_id = int(callback.data.split(":")[1])
-    async with session_factory() as session:
-        customer = await _customer(session, callback.from_user.id)
-        if not customer:
-            await callback.answer(t("start.required"), show_alert=True)
-            return
-        language = normalize_language(customer.language)
-        lead, created = await LeadService(session).create(
-            LeadCreate(
-                customer_id=customer.id,
-                car_id=car_id,
-                source="telegram:car",
-                message=t("lead.request_message", language),
-                idempotency_key=f"tg:{callback.id}:car:{car_id}",
+    language = "uk"
+    try:
+        car_id = int((callback.data or "").split(":", 1)[1])
+        async with session_factory() as session:
+            customer = await _customer(session, callback.from_user.id)
+            if not customer:
+                await callback.answer(t("start.required", language), show_alert=True)
+                return
+            language = normalize_language(customer.language)
+            lead, created = await LeadService(session).create(
+                LeadCreate(
+                    customer_id=customer.id,
+                    car_id=car_id,
+                    source="telegram:car",
+                    message=t("lead.request_message", language),
+                    idempotency_key=f"tg:car:{customer.id}:{car_id}",
+                )
             )
+            car = await session.get(Car, car_id)
+            recipient_ids = await _manager_recipient_ids(session, settings)
+            notification_text = _lead_notification_text(lead, customer, car)
+    except Exception:
+        error_id = uuid.uuid4().hex[:8]
+        logger.exception(
+            "telegram_car_lead_failed",
+            error_id=error_id,
+            telegram_user_id=callback.from_user.id,
+            callback_data=callback.data,
         )
-        car = await session.get(Car, car_id)
-        recipient_ids = await _manager_recipient_ids(session, settings)
-        notification_text = _lead_notification_text(lead, customer, car)
-    await callback.answer(t("lead.transferred", language), show_alert=True)
+        error_text = (
+            f"{t('lead.error', language)}\n"
+            f"{t('lead.error_code', language, error_id=error_id)}"
+        )
+        try:
+            await callback.answer(error_text, show_alert=True)
+        except TelegramAPIError:
+            if callback.message:
+                await callback.message.answer(error_text)
+        return
+
+    try:
+        await callback.answer(t("lead.transferred", language), show_alert=True)
+    except TelegramAPIError:
+        logger.warning(
+            "telegram_car_lead_callback_answer_failed",
+            lead_id=lead.id,
+            telegram_user_id=callback.from_user.id,
+        )
     if callback.message:
         await callback.message.answer(t("lead.thanks", language))
         if created:

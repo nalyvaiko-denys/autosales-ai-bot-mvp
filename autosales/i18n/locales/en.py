@@ -36,6 +36,8 @@ BUTTONS = {
     "admin.car.photos": "📷 Photos",
     "admin.car.gallery": "🖼 Gallery",
     "admin.car.archive": "🗄 Archive",
+    "admin.car.delete": "🗑 Delete",
+    "admin.inventory.all_locations": "All locations",
     "admin.car.add_photo": "➕ Add photos",
     "admin.car.cover": "Cover #{position}",
     "admin.field.name": "Vehicle name",
@@ -85,7 +87,7 @@ TEXTS = {
         "“Toyota”, “under $15,000”, “from 2018”, or a complete car description."
     ),
     "search.ai_prompt": (
-        "Describe the car you want in plain language: budget, year, body type, and your priorities."
+        "Describe the car in plain language: make, budget, year, mileage, fuel, or transmission."
     ),
     "assistant.prompt": (
         "Write a plain-language description with no special format. For example: "
@@ -111,6 +113,11 @@ TEXTS = {
         "No available cars match the required criteria. Tell me which parameter "
         "can be changed; the budget will not be exceeded."
     ),
+    "search.objective_only": (
+        "Provide at least one objective criterion: make, model, price, year, mileage, fuel, "
+        "transmission, or body type. Subjective labels such as reliable or economical are "
+        "not used for search."
+    ),
     "favorite.added": "Added to favorites ⭐",
     "favorite.removed": "Removed from favorites",
     "favorite.empty": "Your favorites list is empty.",
@@ -119,6 +126,8 @@ TEXTS = {
     "lead.request_message": "The customer would like to be contacted about this car",
     "lead.transferred": "Your request was sent to a manager",
     "lead.thanks": "Thank you. A manager received your request and will contact you.",
+    "lead.error": "Your request could not be sent to a manager. Please try again.",
+    "lead.error_code": "Error code: <code>{error_id}</code>",
     "lead.manager_claimed": "A manager has received your request and will contact you.",
     "appointment.ask_date": (
         "Enter your preferred date and time as <code>2026-08-15 14:30</code>. "
@@ -149,7 +158,6 @@ TEXTS = {
     "explanation.transmission": "{transmission} transmission",
     "explanation.fuel": "{fuel}",
     "explanation.body": "{body} body type",
-    "explanation.use_case": "listed use cases: {use_cases}",
     "rag.missing": "This information is not specified. I will ask a manager to clarify it.",
     "content.manager_details": "Ask a manager for details and current availability.",
     "content.phones": "Phone numbers: {phones}.",
@@ -178,12 +186,9 @@ TEXTS = {
     "body.coupe": "coupe",
     "body.liftback": "liftback",
     "body.not_specified": "not specified",
-    "car_status.draft": "planned / draft",
     "car_status.available": "available",
     "car_status.reserved": "reserved",
-    "car_status.test_drive": "test drive",
     "car_status.sold": "sold",
-    "car_status.service": "in service",
     "car_status.archived": "archived",
     "lead_status.new": "new",
     "lead_status.in_progress": "in progress",
@@ -261,7 +266,7 @@ TEXTS = {
         "🧠 <b>LangGraph in this bot</b>\n\n"
         "The <b>🤖 AI assistant</b> button or /ai command runs this graph:\n"
         "<code>classify → search | knowledge</code>\n\n"
-        "• vehicle search: “Find a family crossover under $20,000”;\n"
+        "• vehicle search: “Which Audi cars are currently available?”;\n"
         "• knowledge base: “Which documents are required for a test drive?”.\n\n"
         "LangGraph manages routing and state. A separate full LangChain layer is not "
         "needed: the graph already uses langchain-core, while SQL filters and RAG remain "
@@ -286,7 +291,11 @@ TEXTS = {
     "admin.invalid_status": "Invalid status",
     "admin.content.updated": "Content #{content_id}: {status}",
     "admin.inventory.empty": "The vehicle inventory is empty.",
-    "admin.inventory.heading": "Latest 20 vehicles across all statuses:",
+    "admin.inventory.heading": "Latest vehicles across all statuses:",
+    "admin.inventory.filter_choose": "Choose which location's vehicles to display:",
+    "admin.inventory.loading_location": "Loading vehicles for this location…",
+    "admin.inventory.empty_for_location": "There are no vehicles at “{location}”.",
+    "admin.inventory.heading_filtered": ("🚗 <b>{location}</b>\nVehicles found: {count}"),
     "admin.inventory.cancelled": "Action cancelled.",
     "admin.inventory.unrecognized": "not recognized",
     "admin.inventory.recognized": (
@@ -348,6 +357,9 @@ TEXTS = {
     "admin.inventory.updated": "Vehicle #{car_id} updated ✅",
     "admin.inventory.status_updated": "New status: {status}",
     "admin.inventory.location_updated": "Location for vehicle #{car_id} changed",
+    "admin.inventory.location_updated_to": (
+        "Vehicle #{car_id} moved to “{location}” ✅ The inventory has been updated."
+    ),
     "admin.inventory.photos": (
         "Vehicle #{car_id} photos: {count}. Tap a number to make it the cover."
     ),
@@ -365,6 +377,13 @@ TEXTS = {
     ),
     "admin.inventory.archived": "Vehicle #{car_id} moved to the archive",
     "admin.inventory.archive_cancelled": "Archiving cancelled",
+    "admin.inventory.delete_confirm": (
+        "⚠️ This permanently deletes the listing, its photos, and listing-specific records "
+        "from the database. This action cannot be undone."
+    ),
+    "admin.inventory.deleted": "Vehicle #{car_id} permanently deleted",
+    "admin.inventory.already_deleted": "This vehicle has already been deleted",
+    "admin.inventory.delete_cancelled": "Deletion cancelled",
 }
 
 PROMPTS = {
@@ -375,8 +394,9 @@ PROMPTS = {
         "Extract only explicitly stated brand, model, currency, and engine volume. "
         "Punctuation and word order are optional. Never guess whether an unlabeled number "
         "is a price, year, or mileage. Numeric upper limits are hard. Do not extract or "
-        "infer color: visual appearance is not structured inventory data. Do not infer "
-        "facts the user did not state."
+        "infer color: visual appearance is not structured inventory data. Do not turn "
+        "subjective phrases such as reliable, economical, first car, family car, or "
+        "comfortable into search criteria. Do not infer facts the user did not state."
     ),
     "car_draft.system": (
         "Convert a Ukrainian or English free-text vehicle listing into structured fields: "
@@ -384,8 +404,10 @@ PROMPTS = {
         "mileage, body type, and drive type. Normalize transmission to automatic/manual, "
         "fuel to petrol/diesel/gas/hybrid/electric, and drive to fwd/rwd/awd. A number with "
         "a currency is price; a number after mileage/пробіг or before km/км is mileage; a "
-        "four-digit number near year/рік/року is the year. Never invent missing values or "
-        "infer color."
+        "four-digit number near year/рік/року is the year. In a short listing, a standalone "
+        "number from 1900 to 2100 is the year, and a standalone number over 2100 without a "
+        "currency is mileage. Treat malformed thousand separators such as 7,,200 as 7200. "
+        "Never invent missing values or infer color."
     ),
     "rag.system": (
         "Answer in English using only the supplied company knowledge. Do not infer missing "

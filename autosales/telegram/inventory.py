@@ -4,6 +4,7 @@ import html
 import re
 from decimal import Decimal, InvalidOperation
 
+import structlog
 from aiogram import F, Router
 from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command, StateFilter
@@ -37,6 +38,7 @@ from autosales.services.inventory import (
     add_telegram_photos,
     archive_car,
     create_car,
+    delete_car,
     media_reference,
     set_main_photo,
     update_car,
@@ -46,14 +48,17 @@ from autosales.telegram.keyboards import (
     admin_car_actions,
     admin_car_edit_fields,
     admin_car_statuses,
+    admin_inventory_locations,
     admin_locations,
     admin_menu,
     admin_photo_actions,
     archive_confirmation,
+    car_delete_confirmation,
     photo_upload_keyboard,
 )
 
 router = Router(name="telegram-inventory")
+logger = structlog.get_logger(__name__)
 
 CREATE_DONE = button("admin.publish_done", "uk")
 CANCEL = button("admin.cancel", "uk")
@@ -235,7 +240,8 @@ def _car_payload(data: dict[str, object]) -> CarCreate:
         engine_volume=Decimal(str(data["engine_volume"])),
         location_id=int(data["location_id"]),
         description=None,
-        status=CarStatus.DRAFT,
+        # An unfinished listing stays client-invisible until photos are confirmed.
+        status=CarStatus.ARCHIVED,
     )
 
 
@@ -356,22 +362,77 @@ async def list_inventory(
         await _reject(message, language)
         return
     async with session_factory() as session:
-        cars = list(
-            (
-                await session.scalars(
-                    select(Car)
-                    .options(selectinload(Car.location), selectinload(Car.media))
-                    .order_by(Car.updated_at.desc(), Car.id.desc())
-                    .limit(20)
-                )
-            ).all()
+        locations = await _locations(session)
+    await message.answer(
+        t("admin.inventory.filter_choose", language),
+        reply_markup=admin_inventory_locations(locations, language),
+    )
+
+
+async def _list_inventory_for_location(
+    message: Message,
+    session_factory: async_sessionmaker[AsyncSession],
+    language: str,
+    location_id: int | None,
+) -> None:
+    async with session_factory() as session:
+        statement = (
+            select(Car)
+            .options(selectinload(Car.location), selectinload(Car.media))
+            .order_by(Car.updated_at.desc(), Car.id.desc())
+            .limit(50)
         )
+        location_name = button("admin.inventory.all_locations", language)
+        if location_id is not None:
+            location = await session.get(Location, location_id)
+            if location is None:
+                await message.answer(t("admin.inventory.location_missing", language))
+                return
+            statement = statement.where(Car.location_id == location_id)
+            location_name = f"{location.name} · {location.address}"
+        cars = list((await session.scalars(statement)).all())
     if not cars:
-        await message.answer(t("admin.inventory.empty", language))
+        await message.answer(
+            t("admin.inventory.empty_for_location", language, location=html.escape(location_name))
+        )
         return
-    await message.answer(t("admin.inventory.heading", language))
+    await message.answer(
+        t(
+            "admin.inventory.heading_filtered",
+            language,
+            location=html.escape(location_name),
+            count=len(cars),
+        )
+    )
     for car in cars:
         await _send_admin_car(message, car, language)
+
+
+@router.callback_query(F.data.startswith("admcar:listloc:"))
+async def list_inventory_by_location(
+    callback: CallbackQuery,
+    session_factory: async_sessionmaker[AsyncSession],
+    settings: Settings,
+) -> None:
+    language = await admin_language(callback, session_factory)
+    if not _is_admin(callback, settings):
+        await _reject(callback, language)
+        return
+    raw_location = (callback.data or "").rsplit(":", 1)[1]
+    location_id = None if raw_location == "all" else int(raw_location)
+    await callback.answer(t("admin.inventory.loading_location", language))
+    if callback.message:
+        try:
+            await _list_inventory_for_location(
+                callback.message, session_factory, language, location_id
+            )
+        except Exception:
+            logger.exception(
+                "telegram_admin_inventory_filter_failed",
+                location_id=location_id,
+                admin_id=callback.from_user.id,
+            )
+            await callback.message.answer(t("admin.operation_failed", language))
 
 
 @router.message(
@@ -395,7 +456,7 @@ async def cancel_inventory_action(
     temporary_car_id = data.get("car_id") if current_state == AdminCarCreate.photos.state else None
     if temporary_car_id:
         async with session_factory() as session:
-            await archive_car(session, temporary_car_id, _actor(message))
+            await delete_car(session, temporary_car_id, _actor(message))
     await state.clear()
     await state.update_data(language=language)
     await state.set_state(AdminMode.active)
@@ -848,11 +909,16 @@ async def set_status(
         await _reject(callback, language)
         return
     _, _, raw_car_id, raw_status = (callback.data or "").split(":", 3)
+    try:
+        status = CarStatus(raw_status)
+    except ValueError:
+        await callback.answer(t("admin.invalid_status", language), show_alert=True)
+        return
     async with session_factory() as session:
         car = await update_car(
             session,
             int(raw_car_id),
-            CarUpdate(status=CarStatus(raw_status)),
+            CarUpdate(status=status),
             _actor(callback),
         )
     await callback.answer(
@@ -883,10 +949,22 @@ async def set_location(
             CarUpdate(location_id=int(raw_location_id)),
             _actor(callback),
         )
-    await callback.answer(
-        t("admin.inventory.location_updated", language, car_id=car.id),
-        show_alert=True,
+    location_label = (
+        f"{car.location.name} · {car.location.address}" if car.location else f"#{car.location_id}"
     )
+    confirmation = t(
+        "admin.inventory.location_updated_to",
+        language,
+        car_id=car.id,
+        location=html.escape(location_label),
+    )
+    if callback.message:
+        try:
+            await callback.message.edit_text(confirmation, reply_markup=None)
+        except TelegramAPIError:
+            await callback.message.answer(confirmation)
+        await _send_admin_car(callback.message, car, language)
+    await callback.answer(t("admin.inventory.location_updated", language, car_id=car.id))
 
 
 @router.callback_query(F.data.startswith("admcar:photos:"))
@@ -1079,3 +1157,75 @@ async def cancel_archive(
     if callback.message:
         await callback.message.edit_reply_markup(reply_markup=None)
     await callback.answer(t("admin.inventory.archive_cancelled", language))
+
+
+@router.callback_query(F.data.startswith("admcar:delete:"))
+async def confirm_delete_car(
+    callback: CallbackQuery,
+    settings: Settings,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    language = await admin_language(callback, session_factory)
+    if not _is_admin(callback, settings):
+        await _reject(callback, language)
+        return
+    car_id = int((callback.data or "").rsplit(":", 1)[1])
+    if callback.message:
+        await callback.message.edit_reply_markup(
+            reply_markup=car_delete_confirmation(car_id, language)
+        )
+        await callback.message.answer(t("admin.inventory.delete_confirm", language))
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admcar:delok:"))
+async def apply_delete_car(
+    callback: CallbackQuery,
+    settings: Settings,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    language = await admin_language(callback, session_factory)
+    if not _is_admin(callback, settings):
+        await _reject(callback, language)
+        return
+    car_id = int((callback.data or "").rsplit(":", 1)[1])
+    try:
+        async with session_factory() as session:
+            await delete_car(session, car_id, _actor(callback))
+    except DomainError:
+        await callback.answer(t("admin.inventory.already_deleted", language), show_alert=True)
+        return
+    if callback.message:
+        try:
+            await callback.message.delete()
+        except TelegramAPIError:
+            await callback.message.edit_reply_markup(reply_markup=None)
+    await callback.answer(
+        t("admin.inventory.deleted", language, car_id=car_id),
+        show_alert=True,
+    )
+
+
+@router.callback_query(F.data.startswith("admcar:delno:"))
+async def cancel_delete_car(
+    callback: CallbackQuery,
+    settings: Settings,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    language = await admin_language(callback, session_factory)
+    if not _is_admin(callback, settings):
+        await _reject(callback, language)
+        return
+    car_id = int((callback.data or "").rsplit(":", 1)[1])
+    archived = False
+    try:
+        async with session_factory() as session:
+            car = await CatalogService(session).get(car_id, public=False)
+            archived = car.status == CarStatus.ARCHIVED
+    except DomainError:
+        pass
+    if callback.message:
+        await callback.message.edit_reply_markup(
+            reply_markup=admin_car_actions(car_id, archived=archived, language=language)
+        )
+    await callback.answer(t("admin.inventory.delete_cancelled", language))

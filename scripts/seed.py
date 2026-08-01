@@ -1,11 +1,10 @@
 import asyncio
-from decimal import Decimal
 
 from sqlalchemy import select
 
 from autosales.db import SessionFactory
-from autosales.enums import CarStatus, StaffRole
-from autosales.models import Car, KnowledgeDocument, Location, Manager
+from autosales.enums import StaffRole
+from autosales.models import KnowledgeDocument, Location, Manager
 
 
 async def seed() -> None:
@@ -45,93 +44,6 @@ async def seed() -> None:
                 ),
             ]
         )
-        cars = [
-            Car(
-                brand="Toyota",
-                model="RAV4",
-                generation="XA50",
-                year=2020,
-                price=Decimal("19800"),
-                mileage=72000,
-                body_type="crossover",
-                fuel_type="hybrid",
-                transmission="automatic",
-                drive_type="awd",
-                engine_volume=Decimal("2.5"),
-                color="white",
-                vin="JTMBRREV0LD123456",
-                description="Практичний кросовер із просторим салоном.",
-                equipment="Клімат-контроль, камера заднього огляду, адаптивний круїз-контроль.",
-                condition="Перевірений технічний стан.",
-                use_cases="family city travel reliability economy",
-                status=CarStatus.AVAILABLE,
-                location_id=podil.id,
-            ),
-            Car(
-                brand="Mazda",
-                model="CX-5",
-                generation="KF",
-                year=2019,
-                price=Decimal("18500"),
-                mileage=86000,
-                body_type="crossover",
-                fuel_type="petrol",
-                transmission="automatic",
-                drive_type="awd",
-                engine_volume=Decimal("2.5"),
-                color="red",
-                vin="JM3KFBDM1K0123456",
-                description="Сімейний кросовер із якісним салоном.",
-                equipment="Підігрів сидінь, LED-фари, контроль сліпих зон.",
-                condition="Без зауважень за результатами діагностики.",
-                use_cases="family city comfort safety",
-                status=CarStatus.AVAILABLE,
-                location_id=left_bank.id,
-            ),
-            Car(
-                brand="Skoda",
-                model="Octavia",
-                generation="A8",
-                year=2021,
-                price=Decimal("14900"),
-                mileage=64000,
-                body_type="liftback",
-                fuel_type="diesel",
-                transmission="automatic",
-                drive_type="fwd",
-                engine_volume=Decimal("2.0"),
-                color="gray",
-                vin="TMBJG7NX1MY123456",
-                description="Економний автомобіль для міста і поїздок трасою.",
-                equipment="Двозонний клімат-контроль, CarPlay, парктроніки.",
-                condition="Регламентне обслуговування виконано.",
-                use_cases="city travel economy first_car",
-                status=CarStatus.AVAILABLE,
-                location_id=podil.id,
-            ),
-            Car(
-                brand="Hyundai",
-                model="Kona",
-                generation="OS",
-                year=2020,
-                price=Decimal("15200"),
-                mileage=51000,
-                body_type="crossover",
-                fuel_type="petrol",
-                transmission="automatic",
-                drive_type="fwd",
-                engine_volume=Decimal("1.6"),
-                color="blue",
-                vin="KM8K22AA0LU123456",
-                description="Компактний міський кросовер.",
-                equipment="Камера, CarPlay, підігрів керма.",
-                condition="Перевірений технічний стан.",
-                use_cases="city first_car economy",
-                status=CarStatus.AVAILABLE,
-                location_id=left_bank.id,
-            ),
-        ]
-        session.add_all(cars)
         session.add_all(
             [
                 KnowledgeDocument(
@@ -161,7 +73,7 @@ async def seed() -> None:
             ]
         )
         await session.commit()
-        print("Seed complete: 2 locations, 2 managers, 4 cars, 3 knowledge documents")
+        print("Seed complete: 2 locations, 2 managers, 0 demo cars, 3 knowledge documents")
 
 
 def main() -> None:

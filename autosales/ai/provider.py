@@ -10,6 +10,11 @@ from autosales.enums import FuelType
 from autosales.i18n import prompt
 from autosales.schemas import CarTextDraft, NaturalLanguageCriteria
 
+# One number token. A comma followed by whitespace is a field separator, not a
+# decimal separator, so ``7500, 1.6`` can never turn into ``75001``. Repeated
+# punctuation is accepted because managers often paste prices such as ``7,,200``.
+NUMBER_TOKEN = r"(\d{1,3}(?:[\s\u00a0.,]+\d{3})+|\d+(?:[.,]\d+)?)"
+
 
 class LLMProvider(ABC):
     name: str
@@ -87,6 +92,8 @@ class RuleBasedProvider(LLMProvider):
         "mercedes": "mercedes",
         "ніссан": "nissan",
         "nissan": "nissan",
+        "рено": "renault",
+        "renault": "renault",
         "шкода": "skoda",
         "skoda": "skoda",
         "субару": "subaru",
@@ -102,16 +109,28 @@ class RuleBasedProvider(LLMProvider):
     }
 
     @staticmethod
+    def _parse_number(raw: str) -> float:
+        normalized = raw.replace(" ", "").replace("\u00a0", "").strip(".,")
+        normalized = re.sub(r"(?<=\d)[.,]{2,}(?=\d)", "", normalized)
+        separators = [index for index, char in enumerate(normalized) if char in ",."]
+        if not separators:
+            return float(normalized)
+
+        last_separator = separators[-1]
+        tail = normalized[last_separator + 1 :]
+        if len(tail) == 3:
+            normalized = normalized.replace(",", "").replace(".", "")
+        else:
+            integer = re.sub(r"[,.]", "", normalized[:last_separator])
+            normalized = f"{integer}.{tail}"
+        return float(normalized)
+
+    @staticmethod
     def _first_number(patterns: list[str], text: str) -> int | None:
         for pattern in patterns:
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
-                raw = match.group(1).replace(" ", "").strip(".,")
-                for separator in (",", "."):
-                    if separator in raw:
-                        tail = raw.rsplit(separator, 1)[1]
-                        raw = raw.replace(separator, "" if len(tail) == 3 else ".")
-                number = float(raw)
+                number = RuleBasedProvider._parse_number(match.group(1))
                 suffix = (
                     (match.group(2) or "").lower()
                     if match.lastindex and match.lastindex >= 2
@@ -124,6 +143,14 @@ class RuleBasedProvider(LLMProvider):
 
     @classmethod
     def _brand_and_model(cls, text: str) -> tuple[str | None, str | None]:
+        brand_phrase = re.search(
+            r"(?:бренд(?:у|а)?|марки|brand)\s+([a-zа-яіїєґ][a-zа-яіїєґ-]{1,39})",
+            text,
+            re.IGNORECASE,
+        )
+        if brand_phrase:
+            return brand_phrase.group(1).casefold(), None
+
         for alias in sorted(cls.BRAND_ALIASES, key=len, reverse=True):
             match = re.search(rf"(?<!\w){re.escape(alias)}(?!\w)", text, re.IGNORECASE)
             if not match:
@@ -153,6 +180,13 @@ class RuleBasedProvider(LLMProvider):
                 "mileage",
                 "price",
                 "year",
+                "є",
+                "зараз",
+                "наявності",
+                "is",
+                "are",
+                "available",
+                "cars",
                 "petrol",
                 "diesel",
                 "hybrid",
@@ -162,7 +196,71 @@ class RuleBasedProvider(LLMProvider):
             }:
                 model = None
             return brand, model
+
+        # Listing drafts conventionally start with make and model. This fallback
+        # supports makes outside the alias table without guessing from arbitrary
+        # prose such as "шукаю автомобіль ...".
+        first_field = re.split(r"[,;\n]", text, maxsplit=1)[0].strip()
+        tokens = re.findall(r"[a-zа-яіїєґ][a-zа-яіїєґ0-9-]{0,39}", first_field, re.IGNORECASE)
+        control_words = {
+            "шукаю",
+            "потрібен",
+            "потрібна",
+            "потрібно",
+            "підбери",
+            "знайди",
+            "автомобіль",
+            "авто",
+            "looking",
+            "find",
+            "need",
+            "car",
+            "кросовер",
+            "позашляховик",
+            "седан",
+            "хетчбек",
+            "універсал",
+            "мінівен",
+            "crossover",
+            "suv",
+            "sedan",
+            "hatchback",
+            "wagon",
+            "minivan",
+            "автомат",
+            "механіка",
+            "automatic",
+            "manual",
+            "до",
+            "від",
+            "under",
+            "from",
+        }
+        if 2 <= len(tokens) <= 3 and not ({token.casefold() for token in tokens} & control_words):
+            return tokens[0].casefold(), tokens[1].casefold()
         return None, None
+
+    @classmethod
+    def _listing_positionals(cls, text: str) -> tuple[int | None, int | None]:
+        """Infer only structurally unambiguous year and mileage in listing fields."""
+        repaired = re.sub(r"(?<=\d)[.,]{2,}(?=\d)", "", text)
+        year: int | None = None
+        mileage: int | None = None
+        for field in re.split(r"[,;\n]+", repaired)[1:]:
+            stripped = field.strip().casefold()
+            if not stripped or any(symbol in stripped for symbol in "$€₴"):
+                continue
+            if re.search(r"\b(?:ціна|вартість|price|бюджет|budget)\b", stripped):
+                continue
+            match = re.fullmatch(r"(\d[\d\s\u00a0.]*)\s*(?:рік|року|year)?", stripped)
+            if not match:
+                continue
+            value = int(re.sub(r"\D", "", match.group(1)))
+            if 1900 <= value <= 2100 and year is None:
+                year = value
+            elif 2100 < value <= 2_000_000 and mileage is None:
+                mileage = value
+        return year, mileage
 
     @staticmethod
     def _currency(text: str) -> str | None:
@@ -179,9 +277,9 @@ class RuleBasedProvider(LLMProvider):
         normalized = text.casefold()
         price = self._first_number(
             [
-                r"(?:ціна|вартість|price)\s*(?:до|up\s+to|max|макс\.?)?\s*[$€₴]?\s*([\d\s,.]+)\s*(k|тис|тисяч)?",
-                r"[$€₴]\s*([\d\s,.]+)\s*(k|тис|тисяч)?",
-                r"([\d\s,.]+)\s*(k|тис|тисяч)?\s*(?:[$€₴]|євро|euro|eur|usd|долар\w*|грн|uah)",
+                rf"(?:ціна|вартість|price)\s*(?:до|up\s+to|max|макс\.?)?\s*[$€₴]?\s*{NUMBER_TOKEN}\s*(k|тис|тисяч)?",
+                rf"[$€₴]\s*{NUMBER_TOKEN}\s*(k|тис|тисяч)?",
+                rf"{NUMBER_TOKEN}\s*(k|тис|тисяч)?\s*(?:[$€₴]|євро|euro|eur|usd|долар\w*|грн|uah)",
             ],
             normalized,
         )
@@ -194,11 +292,14 @@ class RuleBasedProvider(LLMProvider):
         )
         mileage = self._first_number(
             [
-                r"(?:пробіг\w*|mileage)\s*(?:до|макс\.?|[:=-])?\s*([\d\s,.]+)\s*(k|тис|тисяч)?",
-                r"([\d\s,.]+)\s*(k|тис|тисяч)?\s*(?:км|km)\b",
+                rf"(?:пробіг\w*|mileage)\s*(?:до|макс\.?|[:=-])?\s*{NUMBER_TOKEN}\s*(k|тис|тисяч)?",
+                rf"{NUMBER_TOKEN}\s*(k|тис|тисяч)?\s*(?:км|km)\b",
             ],
             normalized,
         )
+        positional_year, positional_mileage = self._listing_positionals(normalized)
+        year = year or positional_year
+        mileage = mileage or positional_mileage
         engine_match = re.search(
             r"(?:(?:об['’]?єм\s*(?:двигуна)?|двигун)\s*[:=-]?\s*)?"
             r"(?<!\d)(\d{1,2}[.,]\d)\s*"
@@ -239,9 +340,9 @@ class RuleBasedProvider(LLMProvider):
         text = query.lower()
         budget = self._first_number(
             [
-                r"(?:бюджет|ціна|price|budget)\s*(?:до|up\s+to|under|max|макс\.?)?\s*[$€₴]?\s*([\d\s,.]+)\s*(k|тис|тисяч)?",
-                r"[$€₴]\s*([\d\s,.]+)\s*(k|тис|тисяч)?",
-                r"([\d\s,.]+)\s*(k|тис|тисяч)?\s*(?:[$€₴]|євро|euro|eur|usd|долар\w*|грн|uah)",
+                rf"(?:бюджет|ціна|price|budget)\s*(?:до|up\s+to|under|max|макс\.?)?\s*[$€₴]?\s*{NUMBER_TOKEN}\s*(k|тис|тисяч)?",
+                rf"[$€₴]\s*{NUMBER_TOKEN}\s*(k|тис|тисяч)?",
+                rf"{NUMBER_TOKEN}\s*(k|тис|тисяч)?\s*(?:[$€₴]|євро|euro|eur|usd|долар\w*|грн|uah)",
             ],
             text,
         )
@@ -256,37 +357,14 @@ class RuleBasedProvider(LLMProvider):
         )
         mileage = self._first_number(
             [
-                r"(?:пробіг\w*\s*(?:до|макс\.?)?|mileage\s*(?:under|max)?)\s*([\d\s,.]+)\s*(k|тис|тисяч)?",
-                r"(?:до\s*)?([\d\s,.]+)\s*(k|тис|тисяч)?\s*(?:км|km)",
+                rf"(?:пробіг\w*\s*(?:до|макс\.?)?|mileage\s*(?:under|max)?)\s*{NUMBER_TOKEN}\s*(k|тис|тисяч)?",
+                rf"(?:до\s*)?{NUMBER_TOKEN}\s*(k|тис|тисяч)?\s*(?:км|km)",
             ],
             text,
         )
         draft = await self.extract_car_draft(query, language)
         body_types = [value for key, value in self.BODY_TYPES.items() if key in text]
         fuels = [value for key, value in self.FUELS.items() if key in text]
-        use_case = None
-        priorities: list[str] = []
-        for token, normalized in {
-            "сімейн": "family",
-            "міст": "city",
-            "перша машин": "first_car",
-            "надійн": "reliability",
-            "економн": "economy",
-            "комфорт": "comfort",
-            "безпеч": "safety",
-            "family": "family",
-            "city": "city",
-            "first car": "first_car",
-            "reliab": "reliability",
-            "econom": "economy",
-            "comfort": "comfort",
-            "safe": "safety",
-        }.items():
-            if token in text:
-                if normalized in {"family", "city", "first_car"}:
-                    use_case = normalized
-                else:
-                    priorities.append(normalized)
         return NaturalLanguageCriteria(
             budget_max=Decimal(budget) if budget else None,
             currency=draft.currency,
@@ -296,8 +374,6 @@ class RuleBasedProvider(LLMProvider):
             year_from=year,
             mileage_max=mileage,
             engine_volume=draft.engine_volume,
-            use_case=use_case,
-            priorities=priorities,
             preferred_brands=[draft.brand] if draft.brand else [],
             preferred_models=[draft.model] if draft.model else [],
         )
@@ -400,8 +476,6 @@ class ResilientProvider(LLMProvider):
                 deterministic.year_from,
                 deterministic.mileage_max,
                 deterministic.engine_volume,
-                deterministic.use_case,
-                deterministic.priorities,
                 deterministic.preferred_brands,
                 deterministic.preferred_models,
             )

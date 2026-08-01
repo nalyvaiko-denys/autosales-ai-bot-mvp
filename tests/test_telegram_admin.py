@@ -4,6 +4,8 @@ from autosales.telegram.keyboards import (
     ADMIN_CREATE_CAR,
     ADMIN_INVENTORY,
     ADMIN_STATS,
+    admin_car_statuses,
+    admin_inventory_locations,
     admin_lead_actions,
     admin_menu,
     car_actions,
@@ -24,6 +26,19 @@ def test_telegram_admin_ids_are_explicitly_allowlisted() -> None:
     assert is_telegram_admin(7, settings) is False
 
 
+def test_manager_recipients_accept_ids_and_usernames_without_crashing() -> None:
+    settings = Settings(
+        environment="test",
+        database_url="sqlite+aiosqlite:///:memory:",
+        manager_chat_ids="42, @EnnistyFor, invalid, 42",
+        telegram_admin_ids="1001, @not-an-admin, invalid",
+    )
+
+    assert settings.manager_chat_id_list == [42]
+    assert settings.manager_chat_username_list == ["ennistyfor"]
+    assert settings.telegram_admin_id_list == [1001]
+
+
 def test_admin_menu_exposes_operational_sections() -> None:
     labels = [button.text for row in admin_menu().keyboard for button in row]
     assert ADMIN_INVENTORY in labels
@@ -32,6 +47,19 @@ def test_admin_menu_exposes_operational_sections() -> None:
     assert "📥 Звернення клієнтів" in labels
     assert "📅 Записи на перегляд" not in labels
     assert "🧠 Як працює LangGraph" in labels
+
+
+def test_inventory_statuses_and_location_filters_are_minimal() -> None:
+    statuses = [
+        button.text
+        for row in admin_car_statuses(7, action="setstatus").inline_keyboard
+        for button in row
+    ]
+    locations = admin_inventory_locations([(1, "Майданчик 1"), (2, "Майданчик 2")])
+    callbacks = [button.callback_data for row in locations.inline_keyboard for button in row]
+
+    assert statuses == ["в наявності", "резерв", "продано", "архів"]
+    assert callbacks == ["admcar:listloc:all", "admcar:listloc:1", "admcar:listloc:2"]
 
 
 def test_catalog_card_exposes_gallery_action() -> None:

@@ -82,7 +82,13 @@ def test_english_admin_menu_and_cards_are_localized() -> None:
         "🧠 How LangGraph works",
         "↩️ Exit admin mode",
     ]
-    assert action_labels == ["✏️ Edit", "📷 Photos", "🖼 Gallery", "🗄 Archive"]
+    assert action_labels == [
+        "✏️ Edit",
+        "📷 Photos",
+        "🖼 Gallery",
+        "🗄 Archive",
+        "🗑 Delete",
+    ]
     assert "Request #12" in _lead_text(lead, "en")
     assert "Customer: Alex" in _lead_text(lead, "en")
     assert "Клієнт" not in _lead_text(lead, "en")
@@ -145,11 +151,11 @@ def test_english_car_card_has_english_labels() -> None:
 
 async def test_english_search_parses_and_responds_in_english(session, inventory) -> None:
     result = await HybridSearchService(session, RuleBasedProvider()).search(
-        "family crossover automatic under $20,000 hybrid from 2019",
+        "crossover automatic under $20,000 hybrid from 2019",
         language="en",
     )
 
-    assert [item.car.brand for item in result.recommendations] == ["Toyota"]
+    assert [item.car.brand for item in result.recommendations] == ["Audi"]
     assert "within budget" in result.recommendations[0].explanation
     assert "ціна" not in result.recommendations[0].explanation
 

@@ -56,8 +56,7 @@ class CarBase(BaseModel):
     description: str | None = None
     equipment: str | None = None
     condition: str | None = None
-    use_cases: str | None = None
-    status: CarStatus = CarStatus.DRAFT
+    status: CarStatus = CarStatus.AVAILABLE
     location_id: int
 
     @field_validator("currency")
@@ -90,7 +89,6 @@ class CarUpdate(BaseModel):
     description: str | None = None
     equipment: str | None = None
     condition: str | None = None
-    use_cases: str | None = None
     status: CarStatus | None = None
     location_id: int | None = None
 
@@ -124,7 +122,6 @@ class CarRead(CarListItem):
     masked_vin: str | None
     equipment: str | None
     condition: str | None
-    use_cases: str | None
     created_at: datetime
     updated_at: datetime
     media: list[MediaRead]
@@ -269,11 +266,8 @@ class NaturalLanguageCriteria(BaseModel):
     year_from: int | None = Field(default=None, ge=1900, le=2100)
     mileage_max: int | None = Field(default=None, ge=0)
     engine_volume: Decimal | None = Field(default=None, ge=0, le=20)
-    use_case: str | None = None
-    priorities: list[str] = Field(default_factory=list)
     preferred_brands: list[str] = Field(default_factory=list)
     preferred_models: list[str] = Field(default_factory=list)
-    excluded_brands: list[str] = Field(default_factory=list)
 
 
 class CarTextDraft(BaseModel):

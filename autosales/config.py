@@ -5,6 +5,21 @@ from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def _integer_list(value: str) -> list[int]:
+    result: list[int] = []
+    for item in value.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        try:
+            parsed = int(item)
+        except ValueError:
+            continue
+        if parsed not in result:
+            result.append(parsed)
+    return result
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -48,11 +63,21 @@ class Settings(BaseSettings):
 
     @property
     def manager_chat_id_list(self) -> list[int]:
-        return [int(item.strip()) for item in self.manager_chat_ids.split(",") if item.strip()]
+        return _integer_list(self.manager_chat_ids)
+
+    @property
+    def manager_chat_username_list(self) -> list[str]:
+        return list(
+            dict.fromkeys(
+                item.strip().removeprefix("@").lower()
+                for item in self.manager_chat_ids.split(",")
+                if item.strip().startswith("@") and len(item.strip()) > 1
+            )
+        )
 
     @property
     def telegram_admin_id_list(self) -> list[int]:
-        return [int(item.strip()) for item in self.telegram_admin_ids.split(",") if item.strip()]
+        return _integer_list(self.telegram_admin_ids)
 
     def is_telegram_admin(self, user_id: int) -> bool:
         return user_id in self.telegram_admin_id_list

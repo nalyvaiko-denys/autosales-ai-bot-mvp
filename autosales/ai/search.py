@@ -18,6 +18,24 @@ from autosales.schemas import (
 from autosales.services.catalog import CatalogService
 
 _NUMERIC_TOKEN = re.compile(r"(?<!\w)(?:[<>]=?\s*)?(\d{1,3}(?:[\s.,]\d{3}){1,2}|\d{4,6})(?!\w)")
+_SUBJECTIVE_PREFIXES = (
+    "надійн",
+    "економ",
+    "гарн",
+    "перш",
+    "сімейн",
+    "комфорт",
+    "безпеч",
+    "міст",
+    "reliab",
+    "econom",
+    "beaut",
+    "first",
+    "family",
+    "comfort",
+    "safe",
+    "city",
+)
 
 
 def _numeric_role(text: str, start: int, end: int) -> str | None:
@@ -89,7 +107,33 @@ def hard_filters(criteria: NaturalLanguageCriteria) -> CarSearchFilters:
 
 
 def _tokens(text: str) -> set[str]:
-    return {token for token in re.findall(r"[\w-]{3,}", text.lower()) if not token.isdigit()}
+    return {
+        token
+        for token in re.findall(r"[\w-]{3,}", text.lower())
+        if not token.isdigit()
+        and not any(token.startswith(prefix) for prefix in _SUBJECTIVE_PREFIXES)
+    }
+
+
+def _has_objective_criteria(criteria: NaturalLanguageCriteria) -> bool:
+    return any(
+        (
+            criteria.budget_max,
+            criteria.body_types,
+            criteria.fuel_types,
+            criteria.transmission,
+            criteria.year_from,
+            criteria.mileage_max,
+            criteria.engine_volume,
+            criteria.preferred_brands,
+            criteria.preferred_models,
+        )
+    )
+
+
+def _contains_subjective_request(query: str) -> bool:
+    tokens = re.findall(r"[\w-]{3,}", query.casefold())
+    return any(token.startswith(prefix) for token in tokens for prefix in _SUBJECTIVE_PREFIXES)
 
 
 def _grounded_explanation(car: Car, criteria: NaturalLanguageCriteria, language: str = "uk") -> str:
@@ -129,8 +173,6 @@ def _grounded_explanation(car: Car, criteria: NaturalLanguageCriteria, language:
         reasons.append(
             t("explanation.body", language, body=body_type_label(car.body_type, language))
         )
-    if criteria.use_case and car.use_cases:
-        reasons.append(t("explanation.use_case", language, use_cases=car.use_cases[:100]))
     if not reasons:
         reasons = [t("explanation.year", language, year=car.year)]
         if car.mileage:
@@ -163,6 +205,14 @@ class HybridSearchService:
             )
         criteria = await self.provider.extract_criteria(query, language)
         criteria_provider = self.provider.name
+        if _contains_subjective_request(query) and not _has_objective_criteria(criteria):
+            return AISearchResponse(
+                criteria=criteria,
+                recommendations=[],
+                clarification=t("search.objective_only", language),
+                requires_clarification=True,
+                provider=criteria_provider,
+            )
         filters = hard_filters(criteria)
         cars = list(await self.catalog.candidates(filters))
         if not cars:
@@ -193,11 +243,6 @@ class HybridSearchService:
                 value.lower() for value in criteria.preferred_models
             }:
                 preference += 0.12
-            if criteria.use_case and criteria.use_case in (car.use_cases or "").lower():
-                preference += 0.10
-            priorities = " ".join(criteria.priorities)
-            if priorities and any(token in document.lower() for token in _tokens(priorities)):
-                preference += 0.08
             if criteria.budget_max:
                 price_fit = max(
                     Decimal("0"),

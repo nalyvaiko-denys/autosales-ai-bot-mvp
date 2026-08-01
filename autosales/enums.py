@@ -2,12 +2,9 @@ from enum import StrEnum
 
 
 class CarStatus(StrEnum):
-    DRAFT = "draft"
     AVAILABLE = "available"
     RESERVED = "reserved"
-    TEST_DRIVE = "test_drive"
     SOLD = "sold"
-    SERVICE = "service"
     ARCHIVED = "archived"
 
 
