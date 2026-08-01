@@ -7,7 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from autosales.ai.provider import LLMProvider
 from autosales.enums import CarStatus
 from autosales.i18n import text as t
-from autosales.localization import body_type_label, currency_label, fuel_label, transmission_label
+from autosales.localization import (
+    body_type_label,
+    currency_label,
+    drive_label,
+    format_price,
+    fuel_label,
+    transmission_label,
+)
 from autosales.models import Car
 from autosales.schemas import (
     AISearchResponse,
@@ -97,10 +104,13 @@ def hard_filters(criteria: NaturalLanguageCriteria) -> CarSearchFilters:
         body_type=criteria.body_types[0] if len(criteria.body_types) == 1 else None,
         fuel_types=criteria.fuel_types,
         transmission=criteria.transmission,
+        drive_type=criteria.drive_type,
         year_from=criteria.year_from,
         mileage_to=criteria.mileage_max,
         engine_volume_from=criteria.engine_volume,
         engine_volume_to=criteria.engine_volume,
+        engine_power_from=criteria.engine_power,
+        engine_power_to=criteria.engine_power,
         statuses=[CarStatus.AVAILABLE],
         page_size=50,
     )
@@ -125,6 +135,8 @@ def _has_objective_criteria(criteria: NaturalLanguageCriteria) -> bool:
             criteria.year_from,
             criteria.mileage_max,
             criteria.engine_volume,
+            criteria.engine_power,
+            criteria.drive_type,
             criteria.preferred_brands,
             criteria.preferred_models,
         )
@@ -143,7 +155,7 @@ def _grounded_explanation(car: Car, criteria: NaturalLanguageCriteria, language:
             t(
                 "explanation.price",
                 language,
-                price=car.price,
+                price=format_price(car.price),
                 currency=currency_label(car.currency, language),
             )
         )
@@ -159,6 +171,8 @@ def _grounded_explanation(car: Car, criteria: NaturalLanguageCriteria, language:
         )
     if criteria.engine_volume is not None and car.engine_volume is not None:
         reasons.append(t("explanation.engine", language, volume=car.engine_volume))
+    if criteria.engine_power is not None and car.engine_power is not None:
+        reasons.append(t("explanation.power", language, power=car.engine_power))
     if criteria.transmission:
         reasons.append(
             t(
@@ -172,6 +186,10 @@ def _grounded_explanation(car: Car, criteria: NaturalLanguageCriteria, language:
     if criteria.body_types:
         reasons.append(
             t("explanation.body", language, body=body_type_label(car.body_type, language))
+        )
+    if criteria.drive_type:
+        reasons.append(
+            t("explanation.drive", language, drive=drive_label(car.drive_type, language))
         )
     if not reasons:
         reasons = [t("explanation.year", language, year=car.year)]

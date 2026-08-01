@@ -49,7 +49,9 @@ BUTTONS = {
     "admin.field.price": "Ціна",
     "admin.field.fuel": "Паливо",
     "admin.field.transmission": "Коробка",
-    "admin.field.engine": "Об’єм двигуна",
+    "admin.field.engine": "Двигун / потужність",
+    "admin.field.drive": "Привід",
+    "admin.field.body": "Тип кузова",
     "admin.field.status": "Статус",
     "admin.field.location": "Адреса",
     "admin.confirm.archive": "Так, архівувати",
@@ -75,6 +77,7 @@ TEXTS = {
     "start.registration_required": "Спочатку завершіть реєстрацію через /start.",
     "car.address": "Адреса",
     "car.liter": "л",
+    "car.kilowatt": "кВт",
     "car.kilometer": "км",
     "car.finance": "Можливий продаж в кредит або лізинг",
     "catalog.error": "Сталася помилка при завантаженні каталогу. Спробуйте ще раз.",
@@ -91,7 +94,8 @@ TEXTS = {
         "«Toyota», «до 15000$», «від 2018 року» або повний опис авто."
     ),
     "search.ai_prompt": (
-        "Опишіть бажане авто звичайними словами: марка, бюджет, рік, пробіг, паливо або коробка."
+        "Опишіть бажане авто звичайними словами: марка, кузов, бюджет, рік, пробіг, "
+        "паливо, коробка або привід."
     ),
     "assistant.prompt": (
         "Напишіть звичайний опис без спеціального формату. Наприклад: «Мазда 3, "
@@ -118,7 +122,7 @@ TEXTS = {
     ),
     "search.objective_only": (
         "Вкажіть хоча б один об’єктивний критерій: марку, модель, ціну, рік, пробіг, "
-        "паливо, коробку або кузов. Оцінки на кшталт «надійна» чи «економна» не "
+        "паливо, коробку, привід або кузов. Оцінки на кшталт «надійна» чи «економна» не "
         "використовуються для пошуку."
     ),
     "favorite.added": "Додано в обране ⭐",
@@ -158,9 +162,11 @@ TEXTS = {
     "explanation.year": "{year} рік",
     "explanation.mileage": "пробіг {mileage} км",
     "explanation.engine": "двигун {volume} л",
+    "explanation.power": "потужність {power} кВт",
     "explanation.transmission": "коробка {transmission}",
     "explanation.fuel": "паливо {fuel}",
     "explanation.body": "кузов {body}",
+    "explanation.drive": "привід {drive}",
     "rag.missing": "Ця характеристика не вказана. Передам запит менеджеру для уточнення.",
     "content.manager_details": "Деталі та актуальну наявність уточнюйте у менеджера.",
     "content.phones": "Телефони: {phones}.",
@@ -171,7 +177,7 @@ TEXTS = {
     "content.mileage": "Пробіг: {mileage} км.",
     "fuel.petrol": "бензин",
     "fuel.diesel": "дизель",
-    "fuel.gas": "газ",
+    "fuel.gas": "газ/бензин",
     "fuel.hybrid": "гібрид",
     "fuel.electric": "електро",
     "transmission.automatic": "автомат",
@@ -185,9 +191,12 @@ TEXTS = {
     "body.sedan": "седан",
     "body.hatchback": "хетчбек",
     "body.wagon": "універсал",
-    "body.minivan": "мінівен",
+    "body.minivan": "мінівен / компактвен",
     "body.coupe": "купе",
     "body.liftback": "ліфтбек",
+    "body.convertible": "кабріолет / родстер",
+    "body.pickup": "пікап",
+    "body.van": "мікроавтобус / фургон",
     "body.not_specified": "не вказано",
     "car_status.available": "в наявності",
     "car_status.reserved": "резерв",
@@ -306,8 +315,10 @@ TEXTS = {
         "Авто: {name}\n"
         "Рік: {year}\n"
         "Коробка: {transmission}\n"
-        "Двигун: {engine} л\n"
+        "Двигун: {engine}\n"
         "Паливо: {fuel}\n"
+        "Привід: {drive}\n"
+        "Кузов: {body}\n"
         "Ціна: {price} {currency}\n"
         "Пробіг: {mileage} км"
     ),
@@ -325,10 +336,17 @@ TEXTS = {
     "admin.inventory.prompt.year": "Введіть рік випуску, наприклад 2021:",
     "admin.inventory.prompt.price": "Введіть ціну, наприклад 18500$:",
     "admin.inventory.prompt.fuel_type": (
-        "Введіть паливо: бензин, дизель, газ, гібрид або електро:"
+        "Введіть паливо: бензин, дизель, газ/бензин, гібрид або електро:"
     ),
     "admin.inventory.prompt.transmission": "Введіть коробку: автомат або механіка:",
     "admin.inventory.prompt.engine_volume": ("Введіть об’єм двигуна, наприклад 1.4 або 2.0:"),
+    "admin.inventory.prompt.engine_power": "Введіть потужність електромобіля, наприклад 150 кВт:",
+    "admin.inventory.prompt.drive_type": "Введіть привід: передній, задній або повний:",
+    "admin.inventory.prompt.body_type": (
+        "Введіть тип кузова: седан, хетчбек, універсал, ліфтбек, кросовер, "
+        "позашляховик, купе, кабріолет/родстер, мінівен/компактвен, пікап або "
+        "мікроавтобус/фургон:"
+    ),
     "admin.inventory.location_missing": ("Немає активних майданчиків. Додайте адресу у веб-CRM."),
     "admin.inventory.location_choose": "Оберіть адресу майданчика:",
     "admin.inventory.create_failed": "Не вдалося створити чернетку: {error}",
@@ -340,7 +358,7 @@ TEXTS = {
         "Надішліть один звичайний опис автомобіля. Я сам заповню пост і запитаю "
         "лише те, чого справді не вистачає.\n\n"
         "Приклад: <code>Мазда 3, пробіг 10000, ціна 9890$, 1.4 бензин, "
-        "автомат, 2011 рік, механізаторів</code>\n\n"
+        "автомат, передній привід, седан, 2011 рік, механізаторів</code>\n\n"
         "Адреса 1 — Київське шосе, 41А; адреса 2 — Механізаторів, 1А."
     ),
     "admin.inventory.recognizing": "Розпізнаю дані автомобіля…",
@@ -348,7 +366,12 @@ TEXTS = {
     "admin.inventory.error.year": "Рік має бути числом від 1900 до 2100.",
     "admin.inventory.error.transmission": "Напишіть «автомат» або «механіка».",
     "admin.inventory.error.engine": ("Введіть об’єм числом, наприклад 1.4 або 2.0."),
-    "admin.inventory.error.fuel": ("Вкажіть бензин, дизель, газ, гібрид або електро."),
+    "admin.inventory.error.engine_power": "Введіть потужність від 1 до 2000 кВт.",
+    "admin.inventory.error.fuel": (
+        "Вкажіть бензин, дизель, газ/бензин, гібрид або електро."
+    ),
+    "admin.inventory.error.drive_type": "Вкажіть передній, задній або повний привід.",
+    "admin.inventory.error.body_type": "Вкажіть один із запропонованих типів кузова.",
     "admin.inventory.error.price": ("Введіть додатну ціну, наприклад 9890$ або 9200 EUR."),
     "admin.inventory.photo_added_count": "Фото додано. Усього: {count}.",
     "admin.inventory.photo_required": "Додайте щонайменше одну фотографію.",
@@ -373,7 +396,6 @@ TEXTS = {
     "admin.inventory.photos_saved": "Фотографії збережено ✅",
     "admin.inventory.cover_changed": "Обкладинку змінено ⭐",
     "admin.inventory.photos_empty": "У цього авто ще немає фотографій",
-    "admin.inventory.cover_caption": "⭐ Обкладинка",
     "admin.inventory.archive_confirm": (
         "Авто зникне з клієнтського каталогу, але залишиться в базі й його можна "
         "буде відновити зміною статусу. Продовжити?"
@@ -392,9 +414,12 @@ TEXTS = {
 PROMPTS = {
     "criteria.system": (
         "Витягни критерії пошуку автомобіля з українського або англійського тексту. "
-        "Нормалізуй тип кузова до crossover/suv/sedan/hatchback/wagon/minivan/coupe, "
-        "паливо до petrol/diesel/gas/hybrid/electric, коробку до automatic/manual. "
-        "Витягни лише явно названі марку, модель, валюту та об’єм двигуна. Пунктуація "
+        "Нормалізуй тип кузова до sedan/hatchback/wagon/liftback/crossover/suv/coupe/"
+        "convertible/minivan/pickup/van, паливо до petrol/diesel/gas/hybrid/electric, "
+        "коробку до automatic/manual, привід до fwd/rwd/awd. Код gas означає "
+        "газ/бензин. Враховуй друкарські помилки, дефіси, подвоєні літери й англійські "
+        "назви кузовів. Витягни лише явно названі марку, модель, валюту, об’єм двигуна "
+        "або потужність у кВт. Пунктуація "
         "й порядок слів не мають значення. Не визначай навмання, чи число без підпису "
         "є ціною, роком або пробігом. Числові верхні межі є жорсткими. Не витягуй і не "
         "вгадуй колір: зовнішність не є структурованим параметром каталогу. Не перетворюй "
@@ -404,9 +429,12 @@ PROMPTS = {
     ),
     "car_draft.system": (
         "Перетвори довільний український або англійський опис оголошення на структуровані "
-        "поля: марка, модель, рік, коробка, об’єм двигуна, паливо, ціна, валюта, пробіг, "
-        "кузов і привід. Нормалізуй коробку до automatic/manual, паливо до "
-        "petrol/diesel/gas/hybrid/electric, привід до fwd/rwd/awd. Число з валютою — ціна; "
+        "поля: марка, модель, рік, коробка, об’єм двигуна або потужність у кВт, паливо, "
+        "ціна, валюта, пробіг, кузов і привід. Нормалізуй кузов до sedan/hatchback/wagon/"
+        "liftback/crossover/suv/coupe/convertible/minivan/pickup/van, коробку до "
+        "automatic/manual, паливо до petrol/diesel/gas/hybrid/electric, привід до "
+        "fwd/rwd/awd. Код gas означає газ/бензин. Для electric не заповнюй engine_volume: "
+        "потужність із позначкою кВт/kw записуй в engine_power. Число з валютою — ціна; "
         "число після «пробіг»/mileage або перед км/km — пробіг; чотири цифри біля "
         "«рік/року»/year — рік. У короткому оголошенні окреме число 1900–2100 є роком, "
         "а окреме число понад 2100 без валюти — пробігом. Помилкові роздільники тисяч "

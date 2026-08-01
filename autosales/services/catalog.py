@@ -61,6 +61,10 @@ class CatalogService:
             statement = statement.where(Car.engine_volume >= filters.engine_volume_from)
         if filters.engine_volume_to is not None:
             statement = statement.where(Car.engine_volume <= filters.engine_volume_to)
+        if filters.engine_power_from is not None:
+            statement = statement.where(Car.engine_power >= filters.engine_power_from)
+        if filters.engine_power_to is not None:
+            statement = statement.where(Car.engine_power <= filters.engine_power_to)
         if filters.color:
             statement = statement.where(func.lower(Car.color) == filters.color.lower())
         if filters.origin_country:

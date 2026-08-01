@@ -126,7 +126,9 @@ def admin_car_edit_fields(car_id: int, language: str = "uk") -> InlineKeyboardMa
         (button("admin.field.price", language), "price"),
         (button("admin.field.fuel", language), "fuel_type"),
         (button("admin.field.transmission", language), "transmission"),
-        (button("admin.field.engine", language), "engine_volume"),
+        (button("admin.field.engine", language), "engine"),
+        (button("admin.field.drive", language), "drive_type"),
+        (button("admin.field.body", language), "body_type"),
         (button("admin.field.status", language), "status"),
         (button("admin.field.location", language), "location_id"),
     ]

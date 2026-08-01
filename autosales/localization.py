@@ -1,5 +1,6 @@
 """Localized labels for stable database and API values."""
 
+from decimal import Decimal, InvalidOperation
 from enum import Enum
 
 from autosales.enums import AppointmentStatus, CarStatus, ContentStatus, FuelType, LeadStatus
@@ -56,3 +57,29 @@ def currency_label(value: str, language: str | None = None) -> str:
         return text(f"currency.{code}", language)
     except KeyError:
         return code
+
+
+def format_price(value: Decimal | int | float | str) -> str:
+    """Render whole prices without database-scale cents such as ``.00``."""
+    try:
+        amount = Decimal(str(value))
+    except InvalidOperation:
+        return str(value)
+    if amount == amount.to_integral_value():
+        return format(amount, ".0f")
+    return format(amount.normalize(), "f")
+
+
+def engine_spec_label(
+    fuel_type: str | FuelType,
+    engine_volume: Decimal | None,
+    engine_power: int | None,
+    language: str | None = None,
+) -> str | None:
+    if _value(fuel_type) == FuelType.ELECTRIC.value:
+        if engine_power is None:
+            return None
+        return f"{engine_power} {text('car.kilowatt', language)}"
+    if engine_volume is None:
+        return None
+    return f"{engine_volume} {text('car.liter', language)}"

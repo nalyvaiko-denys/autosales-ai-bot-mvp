@@ -35,7 +35,11 @@ from autosales.i18n import (
     text as t,
 )
 from autosales.localization import (
+    body_type_label,
     currency_label,
+    drive_label,
+    engine_spec_label,
+    format_price,
     fuel_label,
     lead_status_label,
     transmission_label,
@@ -109,11 +113,21 @@ def _car_text(car, settings: Settings, language: str = "uk") -> str:
         fuel_label(car.fuel_type, language),
         transmission_label(car.transmission, language),
     ]
-    if car.engine_volume is not None:
-        details.append(f"{car.engine_volume} {t('car.liter', language)}")
+    engine = engine_spec_label(
+        car.fuel_type,
+        getattr(car, "engine_volume", None),
+        getattr(car, "engine_power", None),
+        language,
+    )
+    if engine:
+        details.append(engine)
+    if getattr(car, "body_type", "not_specified") != "not_specified":
+        details.append(body_type_label(car.body_type, language))
+    if getattr(car, "drive_type", "not_specified") != "not_specified":
+        details.append(drive_label(car.drive_type, language))
     text = (
         f"<b>{html.escape(car.brand)} {html.escape(car.model)} · {car.year}</b>\n"
-        f"💵 {car.price} {currency_label(car.currency, language)}\n"
+        f"💵 {format_price(car.price)} {currency_label(car.currency, language)}\n"
         f"⚙️ {' · '.join(html.escape(value) for value in details)}\n"
         f"📍 {t('car.address', language)}: {html.escape(car.location.city)}, "
         f"{html.escape(car.location.address)}"

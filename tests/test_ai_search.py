@@ -146,3 +146,32 @@ async def test_listing_parser_repairs_malformed_thousands_and_uses_position() ->
     assert draft.mileage == 187000
     assert draft.year == 2008
     assert draft.fuel_type == FuelType.GAS
+
+
+async def test_body_type_search_accepts_typos_hyphens_and_english(session, inventory) -> None:
+    hatchback = inventory["cars"][0]
+    hatchback.body_type = "hatchback"
+    await session.commit()
+    provider = RuleBasedProvider()
+
+    for query in ("хетч-бек", "хетччбек", "hatchhback"):
+        result = await HybridSearchService(session, provider).search(query)
+        assert result.criteria.body_types == ["hatchback"]
+        assert [item.car.id for item in result.recommendations] == [hatchback.id]
+
+
+async def test_parser_extracts_drive_and_electric_power() -> None:
+    provider = RuleBasedProvider()
+    draft = await provider.extract_car_draft(
+        "Tesla 3, 2022 рік, електро 208 кВт, автомат, задній привід, седан, ціна 25000$"
+    )
+    criteria = await provider.extract_criteria("електро 208 kW, rear-wheel drive, sedan")
+
+    assert draft.fuel_type == FuelType.ELECTRIC
+    assert draft.engine_volume is None
+    assert draft.engine_power == 208
+    assert draft.drive_type == "rwd"
+    assert draft.body_type == "sedan"
+    assert criteria.engine_power == 208
+    assert criteria.drive_type == "rwd"
+    assert criteria.body_types == ["sedan"]

@@ -3,8 +3,10 @@ from types import SimpleNamespace
 
 from autosales.config import Settings
 from autosales.enums import FuelType
+from autosales.localization import fuel_label
 from autosales.telegram.handlers import _car_text
 from autosales.telegram.inventory import _car_payload, _match_location, _normalize_fuel
+from autosales.vehicle_values import body_type_code
 
 
 def _locations():
@@ -37,6 +39,25 @@ def test_location_aliases_select_the_two_official_sites() -> None:
 def test_gas_normalization_is_shared_with_manager_form() -> None:
     assert _normalize_fuel("Газ / LPG") == FuelType.GAS.value
     assert FuelType("газ") == FuelType.GAS
+    assert fuel_label(FuelType.GAS) == "газ/бензин"
+
+
+def test_all_supported_body_types_accept_ukrainian_labels() -> None:
+    expected = {
+        "Седан": "sedan",
+        "Хетчбек": "hatchback",
+        "Універсал": "wagon",
+        "Ліфтбек": "liftback",
+        "Кросовер": "crossover",
+        "Позашляховик": "suv",
+        "Купе": "coupe",
+        "Кабріолет / Родстер": "convertible",
+        "Мінівен / Компактвен": "minivan",
+        "Пікап": "pickup",
+        "Мікроавтобус / Фургон": "van",
+    }
+
+    assert {label: body_type_code(label) for label in expected} == expected
 
 
 def test_quick_command_is_not_copied_into_published_description() -> None:
@@ -52,6 +73,8 @@ def test_quick_command_is_not_copied_into_published_description() -> None:
             "fuel_type": FuelType.PETROL,
             "transmission": "automatic",
             "engine_volume": "1.4",
+            "drive_type": "fwd",
+            "body_type": "sedan",
             "location_id": 20,
         }
     )
@@ -66,11 +89,14 @@ def test_client_card_has_only_ukrainian_vehicle_values_and_structured_address() 
         brand="Mazda",
         model="3",
         year=2021,
-        price=Decimal("9000"),
+        price=Decimal("9000.00"),
         currency="USD",
         fuel_type=FuelType.PETROL,
         transmission="automatic",
         engine_volume=Decimal("1.4"),
+        engine_power=None,
+        body_type="sedan",
+        drive_type="fwd",
         mileage=10000,
         description=None,
         location=SimpleNamespace(
@@ -91,5 +117,31 @@ def test_client_card_has_only_ukrainian_vehicle_values_and_structured_address() 
     assert "автомат" in text
     assert "дол. США" in text
     assert "Адреса: Полтава, вул. Механізаторів, 1А" in text
+    assert "седан" in text
+    assert "передній привід" in text
+    assert "9000 дол. США" in text
+    assert "9000.00" not in text
     assert "petrol" not in text
     assert "automatic" not in text
+
+
+def test_electric_payload_uses_kw_instead_of_engine_volume() -> None:
+    payload = _car_payload(
+        {
+            "brand": "tesla",
+            "model": "3",
+            "year": 2022,
+            "price": "25000",
+            "currency": "USD",
+            "mileage": 30000,
+            "fuel_type": FuelType.ELECTRIC,
+            "transmission": "automatic",
+            "engine_power": 208,
+            "drive_type": "rwd",
+            "body_type": "sedan",
+            "location_id": 10,
+        }
+    )
+
+    assert payload.engine_power == 208
+    assert payload.engine_volume is None

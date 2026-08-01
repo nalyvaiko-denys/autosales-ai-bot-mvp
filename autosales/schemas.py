@@ -13,6 +13,7 @@ from autosales.enums import (
     LeadStatus,
 )
 from autosales.i18n import normalize_language
+from autosales.vehicle_values import body_type_code, drive_code, transmission_code
 
 
 class ORMModel(BaseModel):
@@ -49,7 +50,7 @@ class CarBase(BaseModel):
     transmission: str
     drive_type: str
     engine_volume: Decimal | None = Field(default=None, ge=0, le=20)
-    engine_power: int | None = Field(default=None, ge=0)
+    engine_power: int | None = Field(default=None, ge=0, le=2000)
     color: str | None = None
     origin_country: str | None = None
     vin: str | None = Field(default=None, min_length=7, max_length=17)
@@ -63,6 +64,21 @@ class CarBase(BaseModel):
     @classmethod
     def normalize_currency(cls, value: str) -> str:
         return value.upper()
+
+    @field_validator("body_type")
+    @classmethod
+    def normalize_body_type(cls, value: str) -> str:
+        return body_type_code(value)
+
+    @field_validator("drive_type")
+    @classmethod
+    def normalize_drive_type(cls, value: str) -> str:
+        return drive_code(value)
+
+    @field_validator("transmission")
+    @classmethod
+    def normalize_transmission(cls, value: str) -> str:
+        return transmission_code(value)
 
 
 class CarCreate(CarBase):
@@ -82,7 +98,7 @@ class CarUpdate(BaseModel):
     transmission: str | None = None
     drive_type: str | None = None
     engine_volume: Decimal | None = Field(default=None, ge=0, le=20)
-    engine_power: int | None = Field(default=None, ge=0)
+    engine_power: int | None = Field(default=None, ge=0, le=2000)
     color: str | None = None
     origin_country: str | None = None
     vin: str | None = Field(default=None, min_length=7, max_length=17)
@@ -91,6 +107,21 @@ class CarUpdate(BaseModel):
     condition: str | None = None
     status: CarStatus | None = None
     location_id: int | None = None
+
+    @field_validator("body_type")
+    @classmethod
+    def normalize_optional_body_type(cls, value: str | None) -> str | None:
+        return body_type_code(value) if value is not None else None
+
+    @field_validator("drive_type")
+    @classmethod
+    def normalize_optional_drive_type(cls, value: str | None) -> str | None:
+        return drive_code(value) if value is not None else None
+
+    @field_validator("transmission")
+    @classmethod
+    def normalize_optional_transmission(cls, value: str | None) -> str | None:
+        return transmission_code(value) if value is not None else None
 
 
 class CarListItem(ORMModel):
@@ -106,6 +137,7 @@ class CarListItem(ORMModel):
     transmission: str
     drive_type: str
     engine_volume: Decimal | None
+    engine_power: int | None
     description: str | None
     status: CarStatus
     location_id: int
@@ -116,7 +148,6 @@ class CarListItem(ORMModel):
 
 class CarRead(CarListItem):
     generation: str | None
-    engine_power: int | None
     color: str | None
     origin_country: str | None
     masked_vin: str | None
@@ -150,6 +181,8 @@ class CarSearchFilters(BaseModel):
     mileage_to: int | None = Field(default=None, ge=0)
     engine_volume_from: Decimal | None = Field(default=None, ge=0)
     engine_volume_to: Decimal | None = Field(default=None, ge=0)
+    engine_power_from: int | None = Field(default=None, ge=0)
+    engine_power_to: int | None = Field(default=None, ge=0)
     color: str | None = None
     origin_country: str | None = None
     location_id: int | None = None
@@ -166,6 +199,16 @@ class CarSearchFilters(BaseModel):
     ] = "newest"
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=10, ge=1, le=50)
+
+    @field_validator("body_type")
+    @classmethod
+    def normalize_filter_body_type(cls, value: str | None) -> str | None:
+        return body_type_code(value) if value is not None else None
+
+    @field_validator("drive_type")
+    @classmethod
+    def normalize_filter_drive_type(cls, value: str | None) -> str | None:
+        return drive_code(value) if value is not None else None
 
 
 class CustomerCreate(BaseModel):
@@ -266,8 +309,20 @@ class NaturalLanguageCriteria(BaseModel):
     year_from: int | None = Field(default=None, ge=1900, le=2100)
     mileage_max: int | None = Field(default=None, ge=0)
     engine_volume: Decimal | None = Field(default=None, ge=0, le=20)
+    engine_power: int | None = Field(default=None, ge=0, le=2000)
+    drive_type: str | None = None
     preferred_brands: list[str] = Field(default_factory=list)
     preferred_models: list[str] = Field(default_factory=list)
+
+    @field_validator("body_types")
+    @classmethod
+    def normalize_criteria_body_types(cls, values: list[str]) -> list[str]:
+        return list(dict.fromkeys(body_type_code(value) for value in values))
+
+    @field_validator("drive_type")
+    @classmethod
+    def normalize_criteria_drive_type(cls, value: str | None) -> str | None:
+        return drive_code(value) if value else None
 
 
 class CarTextDraft(BaseModel):
@@ -276,6 +331,7 @@ class CarTextDraft(BaseModel):
     year: int | None = Field(default=None, ge=1900, le=2100)
     transmission: str | None = None
     engine_volume: Decimal | None = Field(default=None, ge=0, le=20)
+    engine_power: int | None = Field(default=None, ge=0, le=2000)
     fuel_type: FuelType | None = None
     price: Decimal | None = Field(default=None, gt=0)
     currency: str | None = Field(default=None, min_length=3, max_length=3)
@@ -287,6 +343,16 @@ class CarTextDraft(BaseModel):
     @classmethod
     def normalize_optional_currency(cls, value: str | None) -> str | None:
         return value.upper() if value else None
+
+    @field_validator("body_type")
+    @classmethod
+    def normalize_optional_body_type(cls, value: str | None) -> str | None:
+        return body_type_code(value) if value else None
+
+    @field_validator("drive_type")
+    @classmethod
+    def normalize_optional_drive_type(cls, value: str | None) -> str | None:
+        return drive_code(value) if value else None
 
 
 class AISearchRequest(BaseModel):

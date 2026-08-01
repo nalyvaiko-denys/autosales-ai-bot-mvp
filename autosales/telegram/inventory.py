@@ -27,6 +27,8 @@ from autosales.localization import (
     car_status_label,
     currency_label,
     drive_label,
+    engine_spec_label,
+    format_price,
     fuel_label,
     transmission_label,
 )
@@ -56,6 +58,7 @@ from autosales.telegram.keyboards import (
     car_delete_confirmation,
     photo_upload_keyboard,
 )
+from autosales.vehicle_values import body_type_code, drive_code
 
 router = Router(name="telegram-inventory")
 logger = structlog.get_logger(__name__)
@@ -75,7 +78,10 @@ class AdminCarCreate(StatesGroup):
     year = State()
     transmission = State()
     engine_volume = State()
+    engine_power = State()
     fuel_type = State()
+    drive_type = State()
+    body_type = State()
     price = State()
     location = State()
     photos = State()
@@ -149,14 +155,18 @@ def _normalize_transmission(value: str) -> str | None:
 def _normalize_fuel(value: str) -> str | None:
     lowered = value.casefold()
     for token, normalized in {
+        "газ/бенз": FuelType.GAS.value,
+        "газ-бенз": FuelType.GAS.value,
+        "gas/petrol": FuelType.GAS.value,
+        "lpg/petrol": FuelType.GAS.value,
+        "газ": FuelType.GAS.value,
+        "lpg": FuelType.GAS.value,
         "бенз": FuelType.PETROL.value,
         "petrol": FuelType.PETROL.value,
         "gasoline": FuelType.PETROL.value,
+        "gas": FuelType.GAS.value,
         "диз": FuelType.DIESEL.value,
         "diesel": FuelType.DIESEL.value,
-        "газ": FuelType.GAS.value,
-        "lpg": FuelType.GAS.value,
-        "gas": FuelType.GAS.value,
         "гібрид": FuelType.HYBRID.value,
         "hybrid": FuelType.HYBRID.value,
         "елект": FuelType.ELECTRIC.value,
@@ -166,6 +176,27 @@ def _normalize_fuel(value: str) -> str | None:
         if token in lowered:
             return normalized
     return None
+
+
+def _normalize_drive(value: str) -> str | None:
+    try:
+        return drive_code(value)
+    except ValueError:
+        return None
+
+
+def _normalize_body_type(value: str) -> str | None:
+    try:
+        return body_type_code(value)
+    except ValueError:
+        return None
+
+
+def _parse_power(value: str) -> int:
+    match = re.search(r"\d{1,4}", value.replace(" ", ""))
+    if not match:
+        raise ValueError("потужність не знайдено")
+    return int(match.group(0))
 
 
 def _normalize_location_text(value: str) -> str:
@@ -226,6 +257,8 @@ def _match_location(text: str, locations: list[Location]) -> int | None:
 
 def _car_payload(data: dict[str, object]) -> CarCreate:
     """Build only structured fields; the manager's command text is never published."""
+    fuel_type = str(data["fuel_type"])
+    electric = fuel_type == FuelType.ELECTRIC.value
     return CarCreate(
         brand=_display_brand(str(data["brand"])),
         model=_display_model(str(data["model"])),
@@ -233,11 +266,12 @@ def _car_payload(data: dict[str, object]) -> CarCreate:
         price=Decimal(str(data["price"])),
         currency=str(data.get("currency") or "USD"),
         mileage=int(data.get("mileage") or 0),
-        body_type=str(data.get("body_type") or "not_specified"),
-        fuel_type=str(data["fuel_type"]),
+        body_type=str(data["body_type"]),
+        fuel_type=fuel_type,
         transmission=str(data["transmission"]),
-        drive_type=str(data.get("drive_type") or "not_specified"),
-        engine_volume=Decimal(str(data["engine_volume"])),
+        drive_type=str(data["drive_type"]),
+        engine_volume=None if electric else Decimal(str(data["engine_volume"])),
+        engine_power=int(data["engine_power"]) if electric else None,
         location_id=int(data["location_id"]),
         description=None,
         # An unfinished listing stays client-invisible until photos are confirmed.
@@ -258,15 +292,33 @@ def _recognized_summary(data: dict[str, object], language: str = "uk") -> str:
         else unrecognized
     )
     fuel = fuel_label(str(data["fuel_type"]), language) if data.get("fuel_type") else unrecognized
+    engine = engine_spec_label(
+        str(data.get("fuel_type") or ""),
+        Decimal(str(data["engine_volume"])) if data.get("engine_volume") else None,
+        int(data["engine_power"]) if data.get("engine_power") else None,
+        language,
+    )
+    drive = (
+        drive_label(str(data["drive_type"]), language)
+        if data.get("drive_type")
+        else unrecognized
+    )
+    body = (
+        body_type_label(str(data["body_type"]), language)
+        if data.get("body_type")
+        else unrecognized
+    )
     return t(
         "admin.inventory.recognized",
         language,
         name=html.escape(name) if name else unrecognized,
         year=shown("year"),
         transmission=transmission,
-        engine=shown("engine_volume"),
+        engine=engine or unrecognized,
         fuel=fuel,
-        price=shown("price"),
+        drive=drive,
+        body=body,
+        price=format_price(str(data["price"])) if data.get("price") else unrecognized,
         currency=currency_label(str(data.get("currency") or "USD"), language),
         mileage=shown("mileage"),
     )
@@ -282,8 +334,14 @@ def _car_text(car: Car, language: str = "uk") -> str:
         fuel_label(car.fuel_type, language),
         transmission_label(car.transmission, language),
     ]
-    if car.engine_volume is not None:
-        details.append(f"{car.engine_volume} {t('car.liter', language)}")
+    engine = engine_spec_label(
+        car.fuel_type,
+        car.engine_volume,
+        car.engine_power,
+        language,
+    )
+    if engine:
+        details.append(engine)
     if car.body_type != "not_specified":
         details.append(body_type_label(car.body_type, language))
     if car.drive_type != "not_specified":
@@ -302,7 +360,7 @@ def _car_text(car: Car, language: str = "uk") -> str:
         brand=html.escape(car.brand),
         model=html.escape(car.model),
         year=car.year,
-        price=car.price,
+        price=format_price(car.price),
         currency=currency_label(car.currency, language),
         details=" · ".join(html.escape(value) for value in details),
         location=location,
@@ -473,15 +531,25 @@ async def _continue_creation(
 ) -> None:
     data = await state.get_data()
     language = normalize_language(data.get("language"))
-    for field, field_state in (
+    required_fields = [
         ("brand", AdminCarCreate.name),
         ("model", AdminCarCreate.name),
         ("year", AdminCarCreate.year),
         ("transmission", AdminCarCreate.transmission),
-        ("engine_volume", AdminCarCreate.engine_volume),
         ("fuel_type", AdminCarCreate.fuel_type),
-        ("price", AdminCarCreate.price),
-    ):
+    ]
+    if data.get("fuel_type") == FuelType.ELECTRIC.value:
+        required_fields.append(("engine_power", AdminCarCreate.engine_power))
+    else:
+        required_fields.append(("engine_volume", AdminCarCreate.engine_volume))
+    required_fields.extend(
+        [
+            ("drive_type", AdminCarCreate.drive_type),
+            ("body_type", AdminCarCreate.body_type),
+            ("price", AdminCarCreate.price),
+        ]
+    )
+    for field, field_state in required_fields:
         if not data.get(field):
             await state.set_state(field_state)
             await message.answer(
@@ -570,6 +638,10 @@ async def create_from_text(
             ).all()
         )
     data = draft.model_dump(mode="json", exclude_none=True)
+    if data.get("fuel_type") == FuelType.ELECTRIC.value:
+        data.pop("engine_volume", None)
+    else:
+        data.pop("engine_power", None)
     data.update(
         actor=_actor(message),
         location_id=_match_location(message.text, locations),
@@ -638,6 +710,22 @@ async def create_engine_volume(
     await _continue_creation(message, state, session_factory)
 
 
+@router.message(AdminCarCreate.engine_power, F.text)
+async def create_engine_power(
+    message: Message, state: FSMContext, session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    language = normalize_language((await state.get_data()).get("language"))
+    try:
+        value = _parse_power(message.text)
+        if not 1 <= value <= 2000:
+            raise ValueError
+    except ValueError:
+        await message.answer(t("admin.inventory.error.engine_power", language))
+        return
+    await state.update_data(engine_power=value)
+    await _continue_creation(message, state, session_factory)
+
+
 @router.message(AdminCarCreate.fuel_type, F.text)
 async def create_fuel_type(
     message: Message, state: FSMContext, session_factory: async_sessionmaker[AsyncSession]
@@ -647,7 +735,36 @@ async def create_fuel_type(
     if value is None:
         await message.answer(t("admin.inventory.error.fuel", language))
         return
-    await state.update_data(fuel_type=value)
+    if value == FuelType.ELECTRIC.value:
+        await state.update_data(fuel_type=value, engine_volume=None)
+    else:
+        await state.update_data(fuel_type=value, engine_power=None)
+    await _continue_creation(message, state, session_factory)
+
+
+@router.message(AdminCarCreate.drive_type, F.text)
+async def create_drive_type(
+    message: Message, state: FSMContext, session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    language = normalize_language((await state.get_data()).get("language"))
+    value = _normalize_drive(message.text)
+    if value is None:
+        await message.answer(t("admin.inventory.error.drive_type", language))
+        return
+    await state.update_data(drive_type=value)
+    await _continue_creation(message, state, session_factory)
+
+
+@router.message(AdminCarCreate.body_type, F.text)
+async def create_body_type(
+    message: Message, state: FSMContext, session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    language = normalize_language((await state.get_data()).get("language"))
+    value = _normalize_body_type(message.text)
+    if value is None:
+        await message.answer(t("admin.inventory.error.body_type", language))
+        return
+    await state.update_data(body_type=value)
     await _continue_creation(message, state, session_factory)
 
 
@@ -808,6 +925,14 @@ async def start_edit_field(
             )
         await callback.answer()
         return
+    if field == "engine":
+        async with session_factory() as session:
+            car = await CatalogService(session).get(car_id, public=False)
+        field = (
+            "engine_power"
+            if car.fuel_type == FuelType.ELECTRIC.value
+            else "engine_volume"
+        )
     await state.clear()
     await state.update_data(
         edit_car_id=car_id,
@@ -854,6 +979,8 @@ async def apply_edit(
                 changes["currency"] = currency
         elif field == "engine_volume":
             changes = {field: _parse_decimal(raw_value)}
+        elif field == "engine_power":
+            changes = {field: _parse_power(raw_value)}
         elif field == "transmission":
             value = _normalize_transmission(raw_value)
             if value is None:
@@ -861,6 +988,20 @@ async def apply_edit(
             changes = {field: value}
         elif field == "fuel_type":
             value = _normalize_fuel(raw_value)
+            if value is None:
+                raise ValueError
+            changes = {field: value}
+            if value == FuelType.ELECTRIC.value:
+                changes["engine_volume"] = None
+            else:
+                changes["engine_power"] = None
+        elif field == "drive_type":
+            value = _normalize_drive(raw_value)
+            if value is None:
+                raise ValueError
+            changes = {field: value}
+        elif field == "body_type":
+            value = _normalize_body_type(raw_value)
             if value is None:
                 raise ValueError
             changes = {field: value}
@@ -875,8 +1016,11 @@ async def apply_edit(
             "year": "year",
             "price": "price",
             "engine_volume": "engine",
+            "engine_power": "engine_power",
             "transmission": "transmission",
             "fuel_type": "fuel",
+            "drive_type": "drive_type",
+            "body_type": "body_type",
         }.get(str(field))
         error = (
             t(f"admin.inventory.error.{error_key}", language)
@@ -1087,16 +1231,18 @@ async def admin_gallery(
         await callback.answer(t("admin.inventory.photos_empty", language), show_alert=True)
         return
     if callback.message:
+        car_name = f"{html.escape(car.brand)} {html.escape(car.model)}"
         if len(photos) == 1:
-            await callback.message.answer_photo(media_reference(photos[0].file_url))
+            await callback.message.answer_photo(
+                media_reference(photos[0].file_url),
+                caption=car_name,
+            )
         else:
             await callback.message.answer_media_group(
                 [
                     InputMediaPhoto(
                         media=media_reference(item.file_url),
-                        caption=(
-                            t("admin.inventory.cover_caption", language) if item.is_main else None
-                        ),
+                        caption=car_name if item.is_main else None,
                     )
                     for item in photos
                 ]

@@ -45,7 +45,9 @@ BUTTONS = {
     "admin.field.price": "Price",
     "admin.field.fuel": "Fuel",
     "admin.field.transmission": "Transmission",
-    "admin.field.engine": "Engine volume",
+    "admin.field.engine": "Engine / power",
+    "admin.field.drive": "Drive",
+    "admin.field.body": "Body type",
     "admin.field.status": "Status",
     "admin.field.location": "Address",
     "admin.confirm.archive": "Yes, archive",
@@ -71,6 +73,7 @@ TEXTS = {
     "start.registration_required": "Please complete registration with /start first.",
     "car.address": "Address",
     "car.liter": "L",
+    "car.kilowatt": "kW",
     "car.kilometer": "km",
     "car.finance": "Credit or leasing is available",
     "catalog.error": "An error occurred while loading the catalog. Please try again.",
@@ -87,7 +90,8 @@ TEXTS = {
         "“Toyota”, “under $15,000”, “from 2018”, or a complete car description."
     ),
     "search.ai_prompt": (
-        "Describe the car in plain language: make, budget, year, mileage, fuel, or transmission."
+        "Describe the car in plain language: make, body type, budget, year, mileage, fuel, "
+        "transmission, or drive."
     ),
     "assistant.prompt": (
         "Write a plain-language description with no special format. For example: "
@@ -115,7 +119,7 @@ TEXTS = {
     ),
     "search.objective_only": (
         "Provide at least one objective criterion: make, model, price, year, mileage, fuel, "
-        "transmission, or body type. Subjective labels such as reliable or economical are "
+        "transmission, drive, or body type. Subjective labels such as reliable or economical are "
         "not used for search."
     ),
     "favorite.added": "Added to favorites ⭐",
@@ -155,9 +159,11 @@ TEXTS = {
     "explanation.year": "year {year}",
     "explanation.mileage": "mileage {mileage} km",
     "explanation.engine": "{volume} L engine",
+    "explanation.power": "{power} kW power",
     "explanation.transmission": "{transmission} transmission",
     "explanation.fuel": "{fuel}",
     "explanation.body": "{body} body type",
+    "explanation.drive": "{drive}",
     "rag.missing": "This information is not specified. I will ask a manager to clarify it.",
     "content.manager_details": "Ask a manager for details and current availability.",
     "content.phones": "Phone numbers: {phones}.",
@@ -168,7 +174,7 @@ TEXTS = {
     "content.mileage": "Mileage: {mileage} km.",
     "fuel.petrol": "petrol",
     "fuel.diesel": "diesel",
-    "fuel.gas": "LPG",
+    "fuel.gas": "LPG/petrol",
     "fuel.hybrid": "hybrid",
     "fuel.electric": "electric",
     "transmission.automatic": "automatic",
@@ -182,9 +188,12 @@ TEXTS = {
     "body.sedan": "sedan",
     "body.hatchback": "hatchback",
     "body.wagon": "wagon",
-    "body.minivan": "minivan",
+    "body.minivan": "minivan / compact van",
     "body.coupe": "coupe",
     "body.liftback": "liftback",
+    "body.convertible": "convertible / roadster",
+    "body.pickup": "pickup",
+    "body.van": "minibus / van",
     "body.not_specified": "not specified",
     "car_status.available": "available",
     "car_status.reserved": "reserved",
@@ -303,8 +312,10 @@ TEXTS = {
         "Vehicle: {name}\n"
         "Year: {year}\n"
         "Transmission: {transmission}\n"
-        "Engine: {engine} L\n"
+        "Engine: {engine}\n"
         "Fuel: {fuel}\n"
+        "Drive: {drive}\n"
+        "Body: {body}\n"
         "Price: {price} {currency}\n"
         "Mileage: {mileage} km"
     ),
@@ -320,10 +331,16 @@ TEXTS = {
     "admin.inventory.prompt.year": "Enter the production year, for example 2021:",
     "admin.inventory.prompt.price": "Enter the price, for example $18,500:",
     "admin.inventory.prompt.fuel_type": (
-        "Enter the fuel type: petrol, diesel, LPG, hybrid, or electric:"
+        "Enter the fuel type: petrol, diesel, LPG/petrol, hybrid, or electric:"
     ),
     "admin.inventory.prompt.transmission": ("Enter the transmission: automatic or manual:"),
     "admin.inventory.prompt.engine_volume": ("Enter the engine volume, for example 1.4 or 2.0:"),
+    "admin.inventory.prompt.engine_power": "Enter EV power, for example 150 kW:",
+    "admin.inventory.prompt.drive_type": "Enter the drive: front-wheel, rear-wheel, or all-wheel:",
+    "admin.inventory.prompt.body_type": (
+        "Enter the body type: sedan, hatchback, wagon, liftback, crossover, SUV, coupe, "
+        "convertible/roadster, minivan/compact van, pickup, or minibus/van:"
+    ),
     "admin.inventory.location_missing": (
         "There are no active locations. Add an address in the web CRM."
     ),
@@ -337,7 +354,7 @@ TEXTS = {
         "Send one plain-language vehicle description. I will fill in the post and ask "
         "only for information that is actually missing.\n\n"
         "Example: <code>Mazda 3, mileage 10000 km, price $9890, 1.4 petrol, "
-        "automatic, year 2011, Mekhanizatoriv</code>\n\n"
+        "automatic, front-wheel drive, sedan, year 2011, Mekhanizatoriv</code>\n\n"
         "Address 1 — Kyivske Highway, 41A; address 2 — Mekhanizatoriv, 1A."
     ),
     "admin.inventory.recognizing": "Recognizing vehicle data…",
@@ -345,7 +362,10 @@ TEXTS = {
     "admin.inventory.error.year": "The year must be a number from 1900 to 2100.",
     "admin.inventory.error.transmission": "Enter “automatic” or “manual”.",
     "admin.inventory.error.engine": "Enter a numeric engine volume, such as 1.4 or 2.0.",
-    "admin.inventory.error.fuel": ("Enter petrol, diesel, LPG, hybrid, or electric."),
+    "admin.inventory.error.engine_power": "Enter power from 1 to 2000 kW.",
+    "admin.inventory.error.fuel": ("Enter petrol, diesel, LPG/petrol, hybrid, or electric."),
+    "admin.inventory.error.drive_type": "Enter front-wheel, rear-wheel, or all-wheel drive.",
+    "admin.inventory.error.body_type": "Enter one of the supported body types.",
     "admin.inventory.error.price": ("Enter a positive price, for example $9,890 or 9,200 EUR."),
     "admin.inventory.photo_added_count": "Photo added. Total: {count}.",
     "admin.inventory.photo_required": "Add at least one photo.",
@@ -370,7 +390,6 @@ TEXTS = {
     "admin.inventory.photos_saved": "Photos saved ✅",
     "admin.inventory.cover_changed": "Cover changed ⭐",
     "admin.inventory.photos_empty": "This vehicle does not have any photos yet",
-    "admin.inventory.cover_caption": "⭐ Cover",
     "admin.inventory.archive_confirm": (
         "The vehicle will disappear from the customer catalog but remain in the database "
         "and can be restored by changing its status. Continue?"
@@ -388,10 +407,12 @@ TEXTS = {
 
 PROMPTS = {
     "criteria.system": (
-        "Extract car-search criteria from Ukrainian or English text. Normalize body types "
-        "to crossover/suv/sedan/hatchback/wagon/minivan/coupe, fuel to "
-        "petrol/diesel/gas/hybrid/electric, and transmission to automatic/manual. "
-        "Extract only explicitly stated brand, model, currency, and engine volume. "
+        "Extract car-search criteria from Ukrainian or English text. Normalize body types to "
+        "sedan/hatchback/wagon/liftback/crossover/suv/coupe/convertible/minivan/pickup/van, "
+        "fuel to petrol/diesel/gas/hybrid/electric, transmission to automatic/manual, and "
+        "drive to fwd/rwd/awd. The gas code means LPG/petrol. Account for misspellings, "
+        "hyphens, doubled letters, and English body names. Extract only explicitly stated "
+        "brand, model, currency, engine volume, or power in kW. "
         "Punctuation and word order are optional. Never guess whether an unlabeled number "
         "is a price, year, or mileage. Numeric upper limits are hard. Do not extract or "
         "infer color: visual appearance is not structured inventory data. Do not turn "
@@ -400,9 +421,12 @@ PROMPTS = {
     ),
     "car_draft.system": (
         "Convert a Ukrainian or English free-text vehicle listing into structured fields: "
-        "brand, model, production year, transmission, engine volume, fuel, price, currency, "
-        "mileage, body type, and drive type. Normalize transmission to automatic/manual, "
-        "fuel to petrol/diesel/gas/hybrid/electric, and drive to fwd/rwd/awd. A number with "
+        "brand, model, production year, transmission, engine volume or power in kW, fuel, "
+        "price, currency, mileage, body type, and drive type. Normalize body type to sedan/"
+        "hatchback/wagon/liftback/crossover/suv/coupe/convertible/minivan/pickup/van, "
+        "transmission to automatic/manual, fuel to petrol/diesel/gas/hybrid/electric, and "
+        "drive to fwd/rwd/awd. The gas code means LPG/petrol. For electric vehicles, leave "
+        "engine_volume empty and put a value marked kW/кВт into engine_power. A number with "
         "a currency is price; a number after mileage/пробіг or before km/км is mileage; a "
         "four-digit number near year/рік/року is the year. In a short listing, a standalone "
         "number from 1900 to 2100 is the year, and a standalone number over 2100 without a "

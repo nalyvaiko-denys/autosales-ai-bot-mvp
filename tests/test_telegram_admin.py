@@ -4,6 +4,7 @@ from autosales.telegram.keyboards import (
     ADMIN_CREATE_CAR,
     ADMIN_INVENTORY,
     ADMIN_STATS,
+    admin_car_edit_fields,
     admin_car_statuses,
     admin_inventory_locations,
     admin_lead_actions,
@@ -60,6 +61,14 @@ def test_inventory_statuses_and_location_filters_are_minimal() -> None:
 
     assert statuses == ["в наявності", "резерв", "продано", "архів"]
     assert callbacks == ["admcar:listloc:all", "admcar:listloc:1", "admcar:listloc:2"]
+
+
+def test_admin_car_edit_includes_drive_and_body_type() -> None:
+    keyboard = admin_car_edit_fields(7)
+    callbacks = [button.callback_data for row in keyboard.inline_keyboard for button in row]
+
+    assert "admcar:field:7:drive_type" in callbacks
+    assert "admcar:field:7:body_type" in callbacks
 
 
 def test_catalog_card_exposes_gallery_action() -> None:

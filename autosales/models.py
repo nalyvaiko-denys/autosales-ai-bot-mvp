@@ -150,6 +150,7 @@ class Car(TimestampMixin, Base):
             f"кузов {self.body_type}" if self.body_type != "not_specified" else "",
             f"привід {self.drive_type}" if self.drive_type != "not_specified" else "",
             f"двигун {self.engine_volume} л" if self.engine_volume is not None else "",
+            f"потужність {self.engine_power} кВт" if self.engine_power is not None else "",
             f"пробіг {self.mileage}" if self.mileage else "",
             f"ціна {self.price} {self.currency}",
             self.description or "",

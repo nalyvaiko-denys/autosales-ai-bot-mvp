@@ -8,6 +8,7 @@ from autosales.i18n import prompt, text
 from autosales.localization import (
     currency_label,
     drive_label,
+    format_price,
     fuel_label,
     transmission_label,
 )
@@ -21,7 +22,7 @@ def fallback_content(car: Car, content_type: str, max_length: int, language: str
     price = text(
         "content.price",
         language,
-        price=car.price,
+        price=format_price(car.price),
         currency=currency_label(car.currency, language),
     )
     fuel = text("content.fuel", language, fuel=fuel_label(car.fuel_type, language))

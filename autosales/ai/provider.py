@@ -9,6 +9,7 @@ from autosales.config import Settings
 from autosales.enums import FuelType
 from autosales.i18n import prompt
 from autosales.schemas import CarTextDraft, NaturalLanguageCriteria
+from autosales.vehicle_values import extract_body_types, extract_drive_type
 
 # One number token. A comma followed by whitespace is a field separator, not a
 # decimal separator, so ``7500, 1.6`` can never turn into ``75001``. Repeated
@@ -39,30 +40,17 @@ class RuleBasedProvider(LLMProvider):
 
     name = "rule-based"
 
-    BODY_TYPES = {
-        "кросовер": "crossover",
-        "crossover": "crossover",
-        "suv": "crossover",
-        "позашляховик": "suv",
-        "седан": "sedan",
-        "sedan": "sedan",
-        "хетчбек": "hatchback",
-        "hatchback": "hatchback",
-        "універсал": "wagon",
-        "wagon": "wagon",
-        "мінівен": "minivan",
-        "minivan": "minivan",
-        "купе": "coupe",
-        "coupe": "coupe",
-    }
     FUELS = {
+        "газ/бензин": FuelType.GAS,
+        "gas/petrol": FuelType.GAS,
+        "газ": FuelType.GAS,
+        "lpg": FuelType.GAS,
         "бензин": FuelType.PETROL,
         "petrol": FuelType.PETROL,
         "gasoline": FuelType.PETROL,
+        "gas": FuelType.GAS,
         "дизель": FuelType.DIESEL,
         "diesel": FuelType.DIESEL,
-        "газ": FuelType.GAS,
-        "lpg": FuelType.GAS,
         "гібрид": FuelType.HYBRID,
         "hybrid": FuelType.HYBRID,
         "електро": FuelType.ELECTRIC,
@@ -213,20 +201,37 @@ class RuleBasedProvider(LLMProvider):
             "авто",
             "looking",
             "find",
+            "show",
             "need",
             "car",
+            "тільки",
+            "лише",
+            "only",
             "кросовер",
             "позашляховик",
             "седан",
             "хетчбек",
             "універсал",
             "мінівен",
+            "компактвен",
+            "ліфтбек",
+            "кабріолет",
+            "родстер",
+            "пікап",
+            "мікроавтобус",
+            "фургон",
             "crossover",
             "suv",
             "sedan",
             "hatchback",
             "wagon",
             "minivan",
+            "liftback",
+            "convertible",
+            "roadster",
+            "pickup",
+            "minibus",
+            "van",
             "автомат",
             "механіка",
             "automatic",
@@ -236,8 +241,13 @@ class RuleBasedProvider(LLMProvider):
             "under",
             "from",
         }
-        if 2 <= len(tokens) <= 3 and not ({token.casefold() for token in tokens} & control_words):
-            return tokens[0].casefold(), tokens[1].casefold()
+        vehicle_tokens = [
+            token
+            for token in tokens
+            if token.casefold() not in control_words and not extract_body_types(token)
+        ]
+        if 2 <= len(vehicle_tokens) <= 3:
+            return vehicle_tokens[0].casefold(), vehicle_tokens[1].casefold()
         return None, None
 
     @classmethod
@@ -271,6 +281,19 @@ class RuleBasedProvider(LLMProvider):
         if "₴" in text or re.search(r"\b(?:uah|грн|грив\w*)\b", text):
             return "UAH"
         return None
+
+    @classmethod
+    def _fuel_types(cls, text: str) -> list[FuelType]:
+        fuels = list(dict.fromkeys(value for key, value in cls.FUELS.items() if key in text))
+        combined_gas = re.search(
+            r"(?:газ\s*[/+\-]\s*бенз|бенз\w*\s*[/+\-]\s*газ|gas\s*[/+\-]\s*petrol)",
+            text,
+        )
+        if combined_gas and FuelType.GAS in fuels:
+            fuels = [fuel for fuel in fuels if fuel != FuelType.PETROL]
+        elif "gasoline" in text and FuelType.PETROL in fuels:
+            fuels = [fuel for fuel in fuels if fuel != FuelType.GAS]
+        return fuels
 
     async def extract_car_draft(self, text: str, language: str = "uk") -> CarTextDraft:
         del language
@@ -307,20 +330,18 @@ class RuleBasedProvider(LLMProvider):
             normalized,
         )
         engine_volume = Decimal(engine_match.group(1).replace(",", ".")) if engine_match else None
-        body_types = [value for key, value in self.BODY_TYPES.items() if key in normalized]
-        fuels = [value for key, value in self.FUELS.items() if key in normalized]
+        power_match = re.search(r"(?<!\d)(\d{2,4})\s*(?:квт|kw)\b", normalized)
+        engine_power = int(power_match.group(1)) if power_match else None
+        body_types = extract_body_types(normalized)
+        fuels = self._fuel_types(normalized)
+        if fuels and fuels[0] == FuelType.ELECTRIC:
+            engine_volume = None
         transmission = None
         if re.search(r"\b(?:автомат\w*|automatic|акпп|at)\b", normalized):
             transmission = "automatic"
         elif re.search(r"\b(?:механік\w*|manual|мкпп|mt)\b", normalized):
             transmission = "manual"
-        drive_type = None
-        if re.search(r"\b(?:awd|4x4|повн\w*\s+привід)\b", normalized):
-            drive_type = "awd"
-        elif re.search(r"\b(?:fwd|передн\w*\s+привід)\b", normalized):
-            drive_type = "fwd"
-        elif re.search(r"\b(?:rwd|задн\w*\s+привід)\b", normalized):
-            drive_type = "rwd"
+        drive_type = extract_drive_type(normalized)
         brand, model = self._brand_and_model(normalized)
         return CarTextDraft(
             brand=brand,
@@ -328,6 +349,7 @@ class RuleBasedProvider(LLMProvider):
             year=year,
             transmission=transmission,
             engine_volume=engine_volume,
+            engine_power=engine_power,
             fuel_type=fuels[0] if fuels else None,
             price=Decimal(price) if price else None,
             currency=self._currency(normalized),
@@ -363,8 +385,8 @@ class RuleBasedProvider(LLMProvider):
             text,
         )
         draft = await self.extract_car_draft(query, language)
-        body_types = [value for key, value in self.BODY_TYPES.items() if key in text]
-        fuels = [value for key, value in self.FUELS.items() if key in text]
+        body_types = extract_body_types(text)
+        fuels = self._fuel_types(text)
         return NaturalLanguageCriteria(
             budget_max=Decimal(budget) if budget else None,
             currency=draft.currency,
@@ -374,6 +396,8 @@ class RuleBasedProvider(LLMProvider):
             year_from=year,
             mileage_max=mileage,
             engine_volume=draft.engine_volume,
+            engine_power=draft.engine_power,
+            drive_type=draft.drive_type,
             preferred_brands=[draft.brand] if draft.brand else [],
             preferred_models=[draft.model] if draft.model else [],
         )
@@ -476,6 +500,8 @@ class ResilientProvider(LLMProvider):
                 deterministic.year_from,
                 deterministic.mileage_max,
                 deterministic.engine_volume,
+                deterministic.engine_power,
+                deterministic.drive_type,
                 deterministic.preferred_brands,
                 deterministic.preferred_models,
             )
@@ -499,13 +525,18 @@ class ResilientProvider(LLMProvider):
 
     async def extract_car_draft(self, text: str, language: str = "uk") -> CarTextDraft:
         deterministic = await self.fallback.extract_car_draft(text, language)
+        engine_value = (
+            deterministic.engine_power
+            if deterministic.fuel_type == FuelType.ELECTRIC
+            else deterministic.engine_volume
+        )
         if all(
             (
                 deterministic.brand,
                 deterministic.model,
                 deterministic.year,
                 deterministic.transmission,
-                deterministic.engine_volume,
+                engine_value,
                 deterministic.fuel_type,
                 deterministic.price,
             )
