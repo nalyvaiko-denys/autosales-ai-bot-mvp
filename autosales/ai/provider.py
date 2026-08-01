@@ -236,6 +236,20 @@ class RuleBasedProvider(LLMProvider):
             "механіка",
             "automatic",
             "manual",
+            "привід",
+            "передній",
+            "задній",
+            "повний",
+            "drive",
+            "front",
+            "rear",
+            "wheel",
+            "all",
+            "fwd",
+            "rwd",
+            "awd",
+            "4x4",
+            "4wd",
             "до",
             "від",
             "under",
@@ -244,7 +258,9 @@ class RuleBasedProvider(LLMProvider):
         vehicle_tokens = [
             token
             for token in tokens
-            if token.casefold() not in control_words and not extract_body_types(token)
+            if token.casefold() not in control_words
+            and not extract_body_types(token)
+            and not extract_drive_type(token)
         ]
         if 2 <= len(vehicle_tokens) <= 3:
             return vehicle_tokens[0].casefold(), vehicle_tokens[1].casefold()

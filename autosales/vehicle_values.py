@@ -134,9 +134,31 @@ BODY_TYPE_ALIASES = {
 }
 
 DRIVE_ALIASES = {
-    "fwd": ("передній", "передній привід", "fwd", "front wheel drive"),
-    "rwd": ("задній", "задній привід", "rwd", "rear wheel drive"),
-    "awd": ("повний", "повний привід", "awd", "4x4", "4wd", "all wheel drive"),
+    "fwd": (
+        "передній",
+        "передній привід",
+        "передньопривідн",
+        "fwd",
+        "front drive",
+        "front wheel drive",
+    ),
+    "rwd": (
+        "задній",
+        "задній привід",
+        "задньопривідн",
+        "rwd",
+        "rear drive",
+        "rear wheel drive",
+    ),
+    "awd": (
+        "повний",
+        "повний привід",
+        "повнопривідн",
+        "awd",
+        "4x4",
+        "4wd",
+        "all wheel drive",
+    ),
 }
 
 

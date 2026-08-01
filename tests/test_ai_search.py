@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from autosales.ai.provider import RuleBasedProvider
 from autosales.ai.search import HybridSearchService, ambiguous_numeric_tokens, hard_filters
-from autosales.enums import FuelType
+from autosales.enums import CarStatus, FuelType
 from autosales.schemas import NaturalLanguageCriteria
 
 
@@ -158,6 +158,31 @@ async def test_body_type_search_accepts_typos_hyphens_and_english(session, inven
         result = await HybridSearchService(session, provider).search(query)
         assert result.criteria.body_types == ["hatchback"]
         assert [item.car.id for item in result.recommendations] == [hatchback.id]
+
+
+async def test_drive_only_search_filters_front_rear_and_all_wheel_drive(
+    session, inventory
+) -> None:
+    front, rear, all_wheel = inventory["cars"]
+    front.drive_type = "fwd"
+    rear.drive_type = "rwd"
+    all_wheel.drive_type = "awd"
+    all_wheel.status = CarStatus.AVAILABLE
+    await session.commit()
+    provider = RuleBasedProvider()
+
+    cases = (
+        ("передній привід", "fwd", front.id),
+        ("задній привід", "rwd", rear.id),
+        ("повний привід", "awd", all_wheel.id),
+        ("передньопривідний автомобіль", "fwd", front.id),
+    )
+    for query, expected_drive, expected_car_id in cases:
+        result = await HybridSearchService(session, provider).search(query)
+        assert result.criteria.drive_type == expected_drive
+        assert result.criteria.preferred_brands == []
+        assert result.criteria.preferred_models == []
+        assert [item.car.id for item in result.recommendations] == [expected_car_id]
 
 
 async def test_parser_extracts_drive_and_electric_power() -> None:
