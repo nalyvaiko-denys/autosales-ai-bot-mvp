@@ -299,14 +299,10 @@ def _recognized_summary(data: dict[str, object], language: str = "uk") -> str:
         language,
     )
     drive = (
-        drive_label(str(data["drive_type"]), language)
-        if data.get("drive_type")
-        else unrecognized
+        drive_label(str(data["drive_type"]), language) if data.get("drive_type") else unrecognized
     )
     body = (
-        body_type_label(str(data["body_type"]), language)
-        if data.get("body_type")
-        else unrecognized
+        body_type_label(str(data["body_type"]), language) if data.get("body_type") else unrecognized
     )
     return t(
         "admin.inventory.recognized",
@@ -928,11 +924,7 @@ async def start_edit_field(
     if field == "engine":
         async with session_factory() as session:
             car = await CatalogService(session).get(car_id, public=False)
-        field = (
-            "engine_power"
-            if car.fuel_type == FuelType.ELECTRIC.value
-            else "engine_volume"
-        )
+        field = "engine_power" if car.fuel_type == FuelType.ELECTRIC.value else "engine_volume"
     await state.clear()
     await state.update_data(
         edit_car_id=car_id,

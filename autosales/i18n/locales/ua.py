@@ -367,9 +367,7 @@ TEXTS = {
     "admin.inventory.error.transmission": "Напишіть «автомат» або «механіка».",
     "admin.inventory.error.engine": ("Введіть об’єм числом, наприклад 1.4 або 2.0."),
     "admin.inventory.error.engine_power": "Введіть потужність від 1 до 2000 кВт.",
-    "admin.inventory.error.fuel": (
-        "Вкажіть бензин, дизель, газ/бензин, гібрид або електро."
-    ),
+    "admin.inventory.error.fuel": ("Вкажіть бензин, дизель, газ/бензин, гібрид або електро."),
     "admin.inventory.error.drive_type": "Вкажіть передній, задній або повний привід.",
     "admin.inventory.error.body_type": "Вкажіть один із запропонованих типів кузова.",
     "admin.inventory.error.price": ("Введіть додатну ціну, наприклад 9890$ або 9200 EUR."),

@@ -160,9 +160,7 @@ async def test_body_type_search_accepts_typos_hyphens_and_english(session, inven
         assert [item.car.id for item in result.recommendations] == [hatchback.id]
 
 
-async def test_drive_only_search_filters_front_rear_and_all_wheel_drive(
-    session, inventory
-) -> None:
+async def test_drive_only_search_filters_front_rear_and_all_wheel_drive(session, inventory) -> None:
     front, rear, all_wheel = inventory["cars"]
     front.drive_type = "fwd"
     rear.drive_type = "rwd"

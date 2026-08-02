@@ -184,9 +184,7 @@ def _extract_aliases(value: str, aliases: dict[str, tuple[str, ...]]) -> list[st
         for variant in variants:
             expected = _compact(variant)
             for candidate in candidates:
-                if candidate == expected or (
-                    len(expected) >= 4 and candidate.startswith(expected)
-                ):
+                if candidate == expected or (len(expected) >= 4 and candidate.startswith(expected)):
                     found = True
                     break
                 if (

@@ -784,8 +784,7 @@ async def car_lead(
             callback_data=callback.data,
         )
         error_text = (
-            f"{t('lead.error', language)}\n"
-            f"{t('lead.error_code', language, error_id=error_id)}"
+            f"{t('lead.error', language)}\n{t('lead.error_code', language, error_id=error_id)}"
         )
         try:
             await callback.answer(error_text, show_alert=True)
